@@ -37,7 +37,12 @@ notarize:
         key_id: "{{.Env.MACOS_NOTARY_KEY_ID}}"
         key: "{{.Env.MACOS_NOTARY_KEY}}"
         wait: true
-        timeout: 10m
+        # A brand-new API key's first submission can queue for a long
+        # time on Apple's side (v0.2.3's release hit a 10m timeout after
+        # sitting at "notarizing and waiting" for the full 10m9s), so
+        # give it more headroom. 20m is the max GoReleaser allows here -
+        # Apple rejects longer-lived auth tokens outright.
+        timeout: 20m
 
 archives:
   - id: default
