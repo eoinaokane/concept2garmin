@@ -103,12 +103,30 @@ func TestSportFor(t *testing.T) {
 }
 
 func TestBuildNotes(t *testing.T) {
-	if got, want := buildNotes(""), "Exported from Concept2 via "+SourceURL; got != want {
-		t.Errorf("buildNotes(\"\") = %q, want %q", got, want)
+	detail := concept2.ResultDetail{
+		Result: concept2.Result{
+			WorkoutType:   "VariableInterval",
+			Distance:      13079,
+			Time:          18000,
+			TimeFormatted: "30:00.0",
+			Type:          "bike",
+			HeartRate:     concept2.HeartRate{Average: 142},
+		},
 	}
-	got := buildNotes("Great session")
-	if !strings.HasPrefix(got, "Great session\n\n") || !strings.HasSuffix(got, SourceURL) {
-		t.Errorf("buildNotes(\"Great session\") = %q, missing comment or attribution", got)
+	got := buildNotes(detail)
+	for _, want := range []string{"VariableInterval", "13.1 km", "30:00.0", "avg", "W", "avg HR 142 bpm"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("buildNotes result missing %q: %q", want, got)
+		}
+	}
+	if !strings.HasSuffix(got, SourceURL) {
+		t.Errorf("buildNotes result missing attribution: %q", got)
+	}
+
+	detail.Comments = "Great session"
+	got = buildNotes(detail)
+	if !strings.Contains(got, "Great session") {
+		t.Errorf("buildNotes result missing comment: %q", got)
 	}
 }
 
