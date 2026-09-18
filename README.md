@@ -159,6 +159,11 @@ project.
    export STRAVA_CLIENT_SECRET=...
    ./dist/concept2garmin strava-auth
    ```
+   `--client-id`/`--client-secret` (or the env vars above) are only needed
+   the first time — they're then cached at
+   `~/.config/concept2garmin/strava.cfg` (owner-only permissions), the same
+   way your Concept2 token is cached, so later `strava-auth`/`strava-upload`
+   runs don't need them set again.
 3. Upload everything in `./workout/` that hasn't been uploaded yet:
    ```bash
    ./dist/concept2garmin strava-upload

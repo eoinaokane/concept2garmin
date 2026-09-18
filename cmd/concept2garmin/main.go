@@ -91,8 +91,8 @@ func main() {
 				Name:  "strava-auth",
 				Usage: "(stretch) one-time OAuth authorization to allow uploads to your Strava account",
 				Flags: []cli.Flag{
-					&cli.StringFlag{Name: "client-id", Sources: cli.EnvVars("STRAVA_CLIENT_ID"), Required: true},
-					&cli.StringFlag{Name: "client-secret", Sources: cli.EnvVars("STRAVA_CLIENT_SECRET"), Required: true},
+					&cli.StringFlag{Name: "client-id", Sources: cli.EnvVars("STRAVA_CLIENT_ID")},
+					&cli.StringFlag{Name: "client-secret", Sources: cli.EnvVars("STRAVA_CLIENT_SECRET")},
 				},
 				Action: runStravaAuth,
 			},
@@ -100,8 +100,8 @@ func main() {
 				Name:  "strava-upload",
 				Usage: "(stretch) upload previously downloaded .tcx files in --dir to Strava",
 				Flags: []cli.Flag{
-					&cli.StringFlag{Name: "client-id", Sources: cli.EnvVars("STRAVA_CLIENT_ID"), Required: true},
-					&cli.StringFlag{Name: "client-secret", Sources: cli.EnvVars("STRAVA_CLIENT_SECRET"), Required: true},
+					&cli.StringFlag{Name: "client-id", Sources: cli.EnvVars("STRAVA_CLIENT_ID")},
+					&cli.StringFlag{Name: "client-secret", Sources: cli.EnvVars("STRAVA_CLIENT_SECRET")},
 					dirFlag,
 				},
 				Action: runStravaUpload,
@@ -141,6 +141,26 @@ func resolveToken(cmd *cli.Command) (string, error) {
 		return t, nil
 	}
 	return "", fmt.Errorf("no Concept2 token found; run 'concept2garmin auth <token>' or pass --token/CONCEPT2_TOKEN")
+}
+
+// resolveStravaCredentials prefers explicit --client-id/--client-secret
+// flags (or STRAVA_CLIENT_ID/STRAVA_CLIENT_SECRET env vars, which the flags
+// are already sourced from), persisting them to strava.ConfigPath() for
+// next time, and otherwise falls back to credentials saved by a previous
+// run - so they only need to be supplied once.
+func resolveStravaCredentials(cmd *cli.Command) (clientID, clientSecret string, err error) {
+	id := strings.TrimSpace(cmd.String("client-id"))
+	secret := strings.TrimSpace(cmd.String("client-secret"))
+	if id != "" && secret != "" {
+		if err := strava.SaveConfig(strava.Config{ClientID: id, ClientSecret: secret}); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: could not cache Strava credentials locally: %v\n", err)
+		}
+		return id, secret, nil
+	}
+	if c, err := strava.LoadConfig(); err == nil && c.ClientID != "" && c.ClientSecret != "" {
+		return c.ClientID, c.ClientSecret, nil
+	}
+	return "", "", fmt.Errorf("no Strava API credentials found; pass --client-id/--client-secret (or STRAVA_CLIENT_ID/STRAVA_CLIENT_SECRET) once - see https://www.strava.com/settings/api")
 }
 
 // listCache remembers exactly which result ID was shown at each position by
@@ -587,7 +607,11 @@ func recordDownload(dir string, detail concept2.ResultDetail, fileName string) e
 }
 
 func runStravaAuth(ctx context.Context, cmd *cli.Command) error {
-	if err := strava.Authorize(ctx, cmd.String("client-id"), cmd.String("client-secret")); err != nil {
+	clientID, clientSecret, err := resolveStravaCredentials(cmd)
+	if err != nil {
+		return err
+	}
+	if err := strava.Authorize(ctx, clientID, clientSecret); err != nil {
 		return err
 	}
 	path, _ := strava.TokenPath()
@@ -597,8 +621,10 @@ func runStravaAuth(ctx context.Context, cmd *cli.Command) error {
 
 func runStravaUpload(ctx context.Context, cmd *cli.Command) error {
 	dir := cmd.String("dir")
-	clientID := cmd.String("client-id")
-	clientSecret := cmd.String("client-secret")
+	clientID, clientSecret, err := resolveStravaCredentials(cmd)
+	if err != nil {
+		return err
+	}
 
 	m := loadManifest(dir)
 	accessToken, err := strava.AccessToken(clientID, clientSecret)
