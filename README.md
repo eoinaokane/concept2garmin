@@ -23,11 +23,17 @@ make build        # builds ./dist/concept2garmin
 
 ## Usage
 
-Set your token once so you don't have to pass `--token` every time:
+Save your token once — it's cached at `~/.config/concept2garmin/concept2.token`
+(owner-only permissions) so you don't have to pass `--token` or set
+`CONCEPT2_TOKEN` again:
 
 ```bash
-export CONCEPT2_TOKEN=your-access-token
+./dist/concept2garmin auth your-access-token
 ```
+
+`--token`/`CONCEPT2_TOKEN` still work and take priority when set (and are
+themselves cached to that file for next time), so a one-off
+`--token ...` on any command also works without running `auth` first.
 
 List your 10 most recent workouts, numbered 1 (most recent) upward:
 

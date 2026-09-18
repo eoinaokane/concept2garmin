@@ -41,6 +41,12 @@ func main() {
 		Usage: "list and download Concept2 logbook workouts as Garmin-compatible TCX files",
 		Commands: []*cli.Command{
 			{
+				Name:      "auth",
+				Usage:     "save your Concept2 API token locally so --token/CONCEPT2_TOKEN aren't needed every time",
+				ArgsUsage: "<token>",
+				Action:    runAuth,
+			},
+			{
 				Name:      "list",
 				Usage:     "show your most recent Concept2 workouts, numbered for use with 'get'",
 				ArgsUsage: " ",
@@ -88,6 +94,34 @@ func main() {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}
+}
+
+func runAuth(ctx context.Context, cmd *cli.Command) error {
+	if cmd.Args().Len() != 1 {
+		return fmt.Errorf("expected exactly one argument: your Concept2 API token (e.g. 'concept2garmin auth abc123')")
+	}
+	if err := concept2.SaveToken(cmd.Args().First()); err != nil {
+		return fmt.Errorf("saving token: %w", err)
+	}
+	path, _ := concept2.TokenPath()
+	fmt.Printf("Concept2 token saved to %s\n", path)
+	return nil
+}
+
+// resolveToken prefers an explicit --token flag (or CONCEPT2_TOKEN env var,
+// which the flag is already sourced from), persisting it for next time, and
+// otherwise falls back to a token saved earlier via 'concept2garmin auth'.
+func resolveToken(cmd *cli.Command) (string, error) {
+	if t := strings.TrimSpace(cmd.String("token")); t != "" {
+		if err := concept2.SaveToken(t); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: could not cache token locally: %v\n", err)
+		}
+		return t, nil
+	}
+	if t, err := concept2.LoadStoredToken(); err == nil && t != "" {
+		return t, nil
+	}
+	return "", fmt.Errorf("no Concept2 token found; run 'concept2garmin auth <token>' or pass --token/CONCEPT2_TOKEN")
 }
 
 // listCache remembers exactly which result ID was shown at each position by
@@ -142,9 +176,9 @@ func summaryLine(r concept2.Result) string {
 }
 
 func runList(ctx context.Context, cmd *cli.Command) error {
-	token := cmd.String("token")
-	if strings.TrimSpace(token) == "" {
-		return fmt.Errorf("--token (or CONCEPT2_TOKEN) is required")
+	token, err := resolveToken(cmd)
+	if err != nil {
+		return err
 	}
 	limit := int(cmd.Int("limit"))
 	dir := cmd.String("dir")
@@ -171,9 +205,9 @@ func runList(ctx context.Context, cmd *cli.Command) error {
 }
 
 func runGet(ctx context.Context, cmd *cli.Command) error {
-	token := cmd.String("token")
-	if strings.TrimSpace(token) == "" {
-		return fmt.Errorf("--token (or CONCEPT2_TOKEN) is required")
+	token, err := resolveToken(cmd)
+	if err != nil {
+		return err
 	}
 	if cmd.Args().Len() != 1 {
 		return fmt.Errorf("expected exactly one argument: the position from 'list' (e.g. 'concept2garmin get 1')")
