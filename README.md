@@ -48,6 +48,13 @@ List your 10 most recent workouts, numbered 1 (most recent) upward:
 ...
 ```
 
+Show metadata for a single workout (by the position shown above) — date,
+type, distance, duration, calories, heart rate, etc.:
+
+```bash
+./dist/concept2garmin show 1
+```
+
 Download a single workout (by the position shown above) as a `.tcx` file
 into `./workout/`:
 

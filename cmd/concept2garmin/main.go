@@ -58,6 +58,17 @@ func main() {
 				Action: runList,
 			},
 			{
+				Name:      "show",
+				Usage:     "show metadata for one workout (by the position shown in 'list')",
+				ArgsUsage: "<position>",
+				Flags: []cli.Flag{
+					tokenFlag,
+					&cli.IntFlag{Name: "limit", Value: defaultLimit, Usage: "how many recent workouts 'position' is counted against, if 'list' hasn't been run yet"},
+					dirFlag,
+				},
+				Action: runShow,
+			},
+			{
 				Name:      "get",
 				Usage:     "download one workout (by the position shown in 'list') as a .tcx file",
 				ArgsUsage: "<position>",
@@ -251,6 +262,116 @@ func runGet(ctx context.Context, cmd *cli.Command) error {
 
 	fmt.Printf("saved %s\n", fullPath)
 	return nil
+}
+
+func runShow(ctx context.Context, cmd *cli.Command) error {
+	token, err := resolveToken(cmd)
+	if err != nil {
+		return err
+	}
+	if cmd.Args().Len() != 1 {
+		return fmt.Errorf("expected exactly one argument: the position from 'list' (e.g. 'concept2garmin show 1')")
+	}
+	position, err := parsePosition(cmd.Args().First())
+	if err != nil {
+		return err
+	}
+	dir := cmd.String("dir")
+	limit := int(cmd.Int("limit"))
+
+	client := concept2.NewClient(token)
+	resultID, err := resolvePosition(client, dir, position, limit)
+	if err != nil {
+		return err
+	}
+
+	detail, err := client.GetResultDetail(resultID)
+	if err != nil {
+		return fmt.Errorf("fetching workout detail: %w", err)
+	}
+
+	printWorkoutMetadata(position, detail)
+	return nil
+}
+
+func printWorkoutMetadata(position int, d concept2.ResultDetail) {
+	start, err := d.StartTime()
+	dateStr := d.Date
+	if err == nil {
+		loc := ""
+		if d.Timezone != "" {
+			loc = " (" + d.Timezone + ")"
+		}
+		dateStr = start.Format("2006-01-02 15:04:05") + loc
+	}
+
+	fmt.Printf("Workout #%d (Concept2 id %d)\n", position, d.ID)
+	fmt.Printf("Date:            %s\n", dateStr)
+	fmt.Printf("Type:            %s\n", machineLabel(d.Type))
+	fmt.Printf("Workout type:    %s\n", valueOr(d.WorkoutType, "n/a"))
+	fmt.Printf("Distance:        %d m\n", d.Distance)
+	fmt.Printf("Duration:        %s\n", d.TimeFormatted)
+	fmt.Printf("Calories:        %d kcal\n", d.CaloriesTotal)
+	fmt.Printf("Drag factor:     %s\n", intOr(d.DragFactor, "n/a"))
+	fmt.Printf("Avg stroke rate: %s\n", intOr(d.StrokeRate, "n/a"))
+	fmt.Printf("Heart rate:      %s\n", heartRateSummary(d.HeartRate))
+	fmt.Printf("Source:          %s\n", valueOr(d.Source, "n/a"))
+	fmt.Printf("Stroke-by-stroke data available: %s\n", yesNo(d.StrokeData))
+
+	segments := d.Workout.Intervals
+	label := "intervals"
+	if len(segments) == 0 {
+		segments = d.Workout.Splits
+		label = "splits"
+	}
+	if len(segments) > 0 {
+		fmt.Printf("Segments:        %d %s\n", len(segments), label)
+	}
+
+	if d.Comments != "" {
+		fmt.Printf("Comments:        %s\n", d.Comments)
+	}
+}
+
+func heartRateSummary(hr concept2.HeartRate) string {
+	if hr.Average == 0 && hr.Min == 0 && hr.Max == 0 && hr.Ending == 0 {
+		return "n/a"
+	}
+	parts := []string{}
+	if hr.Average > 0 {
+		parts = append(parts, fmt.Sprintf("avg %d", hr.Average))
+	}
+	if hr.Min > 0 {
+		parts = append(parts, fmt.Sprintf("min %d", hr.Min))
+	}
+	if hr.Max > 0 {
+		parts = append(parts, fmt.Sprintf("max %d", hr.Max))
+	}
+	if hr.Ending > 0 {
+		parts = append(parts, fmt.Sprintf("ending %d", hr.Ending))
+	}
+	return strings.Join(parts, ", ") + " bpm"
+}
+
+func valueOr(s, fallback string) string {
+	if strings.TrimSpace(s) == "" {
+		return fallback
+	}
+	return s
+}
+
+func intOr(v int, fallback string) string {
+	if v == 0 {
+		return fallback
+	}
+	return fmt.Sprintf("%d", v)
+}
+
+func yesNo(b bool) string {
+	if b {
+		return "yes"
+	}
+	return "no"
 }
 
 func parsePosition(arg string) (int, error) {
