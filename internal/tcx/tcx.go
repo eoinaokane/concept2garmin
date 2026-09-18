@@ -168,12 +168,13 @@ func lapsFromStrokes(strokes []concept2.Stroke, start time.Time) []lapData {
 
 	for i, s := range strokes {
 		if i > 0 && s.Time < lastT {
-			// A new interval started; carry the previous interval's totals
-			// forward so time/distance keep climbing across the workout,
-			// and close out the lap we were building.
+			// A new interval started; close out the lap we were building
+			// (using the offset still in effect for the interval that just
+			// ended), then carry its totals forward so time/distance keep
+			// climbing across the workout for the next interval.
+			flush()
 			timeOffsetTenths += lastT
 			distOffsetDeci += lastD
-			flush()
 		}
 		absTenths := timeOffsetTenths + s.Time
 		absDeci := distOffsetDeci + s.Distance

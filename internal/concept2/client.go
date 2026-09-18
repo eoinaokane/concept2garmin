@@ -128,8 +128,8 @@ type Result struct {
 	HeartRate     HeartRate `json:"heart_rate"`
 }
 
-// StartTime parses Date using Timezone, falling back to UTC parsing of
-// DateUTC if the local timezone can't be loaded.
+// StartTime parses Date using Timezone, falling back to parsing DateUTC as
+// UTC if the local timezone can't be loaded.
 func (r Result) StartTime() (time.Time, error) {
 	const layout = "2006-01-02 15:04:05"
 	if r.Timezone != "" {
@@ -139,7 +139,7 @@ func (r Result) StartTime() (time.Time, error) {
 			}
 		}
 	}
-	return time.Parse(layout, r.DateUTC+"Z0700")
+	return time.ParseInLocation(layout, r.DateUTC, time.UTC)
 }
 
 // ListResults fetches every result between from and to (inclusive),
