@@ -150,7 +150,7 @@ func TestLapsFromStrokes_SingleInterval(t *testing.T) {
 		{Time: 30, Distance: 60, Pace: 1200, StrokeRate: 24, HeartRate: 150},
 	}
 
-	laps := lapsFromStrokes(strokes, start)
+	laps := lapsFromStrokes(strokes, start, nil)
 	if len(laps) != 1 {
 		t.Fatalf("len(laps) = %d, want 1", len(laps))
 	}
@@ -180,7 +180,7 @@ func TestLapsFromStrokes_MultipleIntervals(t *testing.T) {
 		{Time: 15, Distance: 30, Pace: 1200},
 	}
 
-	laps := lapsFromStrokes(strokes, start)
+	laps := lapsFromStrokes(strokes, start, nil)
 	if len(laps) != 2 {
 		t.Fatalf("len(laps) = %d, want 2", len(laps))
 	}
@@ -248,6 +248,119 @@ func TestLapsFromSegments(t *testing.T) {
 	firstPointLap1 := laps[1].Points[0]
 	if firstPointLap1.DistanceMeters != 1000 {
 		t.Errorf("lap 1 first point distance = %v, want 1000", firstPointLap1.DistanceMeters)
+	}
+}
+
+func TestCumulativeDeciBoundaries(t *testing.T) {
+	segments := []concept2.WorkoutSegment{
+		{Distance: 500},
+		{Distance: 500},
+		{Distance: 1000},
+	}
+	got := cumulativeDeciBoundaries(segments)
+	want := []int{5000, 10000, 20000}
+	if len(got) != len(want) {
+		t.Fatalf("len = %d, want %d", len(got), len(want))
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("boundary[%d] = %d, want %d", i, got[i], want[i])
+		}
+	}
+
+	if got := cumulativeDeciBoundaries(nil); got != nil {
+		t.Errorf("cumulativeDeciBoundaries(nil) = %v, want nil", got)
+	}
+}
+
+// TestLapsFromStrokes_FixedDistanceSplits checks the fix for a
+// FixedDistanceSplits workout: a single continuous piece (stroke time never
+// resets) but with distance markers from Workout.Splits. Without the
+// splitBoundariesDeci argument, this would collapse into a single lap even
+// though Concept2 reports multiple splits for it.
+func TestLapsFromStrokes_FixedDistanceSplits(t *testing.T) {
+	start := time.Date(2026, 9, 18, 12, 0, 0, 0, time.UTC)
+	// Continuous 1000m piece split at 500m: cumulative time/distance never
+	// resets across the split boundary. Distance is in decimetres (matching
+	// concept2.Stroke.Distance), so 500m = 5000.
+	strokes := []concept2.Stroke{
+		{Time: 1000, Distance: 4900, Pace: 1200},
+		{Time: 1200, Distance: 5000, Pace: 1200}, // crosses the 500m (5000 deci) boundary
+		{Time: 2200, Distance: 9900, Pace: 1200},
+		{Time: 2400, Distance: 10000, Pace: 1200},
+	}
+	boundaries := cumulativeDeciBoundaries([]concept2.WorkoutSegment{
+		{Distance: 500},
+		{Distance: 500},
+	})
+
+	laps := lapsFromStrokes(strokes, start, boundaries)
+	if len(laps) != 2 {
+		t.Fatalf("len(laps) = %d, want 2", len(laps))
+	}
+
+	if laps[0].DistanceMeters != 500.0 {
+		t.Errorf("lap 0 DistanceMeters = %v, want 500.0", laps[0].DistanceMeters)
+	}
+	if laps[0].TimeTenths != 1200 {
+		t.Errorf("lap 0 TimeTenths = %d, want 1200", laps[0].TimeTenths)
+	}
+
+	if laps[1].DistanceMeters != 500.0 {
+		t.Errorf("lap 1 DistanceMeters = %v, want 500.0", laps[1].DistanceMeters)
+	}
+	if laps[1].TimeTenths != 1200 {
+		t.Errorf("lap 1 TimeTenths = %d, want 1200", laps[1].TimeTenths)
+	}
+
+	// Distances/times must keep climbing across the split boundary, not
+	// reset the way an interval boundary does.
+	lastPointLap0 := laps[0].Points[len(laps[0].Points)-1]
+	firstPointLap1 := laps[1].Points[0]
+	if firstPointLap1.DistanceMeters <= lastPointLap0.DistanceMeters {
+		t.Errorf("lap 1 first point distance %v not greater than lap 0 last point distance %v", firstPointLap1.DistanceMeters, lastPointLap0.DistanceMeters)
+	}
+}
+
+func TestBuild_FixedDistanceSplitsProducesMultipleLaps(t *testing.T) {
+	detail := concept2.ResultDetail{
+		Result: concept2.Result{
+			ID:            4,
+			Date:          "2026-09-18 12:00:00",
+			Timezone:      "UTC",
+			Distance:      1000,
+			Time:          2400,
+			CaloriesTotal: 20,
+			Type:          "rower",
+			Workout: concept2.Workout{
+				// No Intervals - a FixedDistanceSplits workout only reports
+				// Splits, with no rest between them.
+				Splits: []concept2.WorkoutSegment{
+					{Time: 1200, Distance: 500, CaloriesTotal: 10},
+					{Time: 1200, Distance: 500, CaloriesTotal: 10},
+				},
+			},
+		},
+	}
+	detail.Strokes.Data = []concept2.Stroke{
+		{Time: 1000, Distance: 4900, Pace: 1200},
+		{Time: 1200, Distance: 5000, Pace: 1200},
+		{Time: 2200, Distance: 9900, Pace: 1200},
+		{Time: 2400, Distance: 10000, Pace: 1200},
+	}
+
+	body, err := Build(detail)
+	if err != nil {
+		t.Fatalf("Build returned error: %v", err)
+	}
+
+	var doc trainingCenterDatabase
+	if err := xml.Unmarshal(body, &doc); err != nil {
+		t.Fatalf("output is not well-formed XML: %v", err)
+	}
+
+	if got := len(doc.Activities.Activity.Laps); got != 2 {
+		t.Fatalf("len(Laps) = %d, want 2", got)
 	}
 }
 
