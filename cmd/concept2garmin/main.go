@@ -314,6 +314,7 @@ func printWorkoutMetadata(position int, d concept2.ResultDetail) {
 	printField("Calories", fmt.Sprintf("%d kcal", d.CaloriesTotal))
 	printField("Drag factor", intOr(d.DragFactor, "n/a"))
 	printField(cadenceLabel(d.Type), intOr(d.StrokeRate, "n/a"))
+	printField("Avg power", avgPowerSummary(d))
 
 	segments := d.Workout.Intervals
 	segmentKind := "intervals"
@@ -333,6 +334,19 @@ func printWorkoutMetadata(position int, d concept2.ResultDetail) {
 	if d.Comments != "" {
 		printField("Comments", d.Comments)
 	}
+}
+
+// avgPowerSummary estimates average power over the whole result from its
+// total distance and work time (Time excludes rest periods, so this is an
+// average over time actually spent working, not elapsed session time).
+// Applies to every machine type - see tcx.WattsFromPace for why the same
+// formula covers BikeErg's per-1000m split too.
+func avgPowerSummary(d concept2.ResultDetail) string {
+	watts := tcx.WattsFromDistanceTime(d.Distance, d.Time, tcx.SplitDistanceMetres(d.Type))
+	if watts <= 0 {
+		return "n/a"
+	}
+	return fmt.Sprintf("%d W", watts)
 }
 
 func printField(label, value string) {

@@ -89,12 +89,17 @@ Strava's **Upload Activity** page.
 
 ## How watts are computed
 
-Concept2's published power formula, `watts = 2.80 / (pace_per_500m_seconds / 500)^3`,
-is applied to rower/SkiErg/dynamic pieces that have stroke-by-stroke data
-(`stroke_data: true` in the API). BikeErg uses a different drag curve that
-this formula doesn't model, so bike workouts are exported without a watts
-value rather than a misleading one. Workouts without stroke-by-stroke data
-fall back to one trackpoint per interval/split, without watts.
+Concept2's published power formula, `watts = 2.80 / (split_seconds / 500)^3`,
+is applied to every machine type. "Split" is whatever Concept2 itself uses
+as the pace value: time per 500m for RowErg/SkiErg/dynamic, time per 1000m
+for BikeErg — the same `/500` divisor is used either way, since Concept2
+doesn't rescale BikeErg's split before applying the formula (see the
+[Concept2 watts calculator](https://www.concept2.com/training/watts-calculator)
+and [Erg Arcade's pace derivatives writeup](https://ergarcade.com/articles/c2-pace-derivatives)).
+
+Workouts with stroke-by-stroke data (`stroke_data: true` in the API) get a
+per-stroke watts value. Workouts without it fall back to one trackpoint per
+interval/split, with watts estimated from each segment's own average pace.
 
 ## Development
 

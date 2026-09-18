@@ -84,14 +84,14 @@ func Build(detail concept2.ResultDetail) ([]byte, error) {
 // at all (Build then synthesizes a two-point lap).
 func buildPoints(detail concept2.ResultDetail, start time.Time) []point {
 	if len(detail.Strokes.Data) > 0 {
-		return pointsFromStrokes(detail.Strokes.Data, detail.Type, start)
+		return pointsFromStrokes(detail.Strokes.Data, start)
 	}
 	segments := detail.Workout.Intervals
 	if len(segments) == 0 {
 		segments = detail.Workout.Splits
 	}
 	if len(segments) > 0 {
-		return pointsFromSegments(segments, start)
+		return pointsFromSegments(segments, start, SplitDistanceMetres(detail.Type))
 	}
 	return nil
 }
@@ -99,7 +99,7 @@ func buildPoints(detail concept2.ResultDetail, start time.Time) []point {
 // pointsFromStrokes converts stroke-level samples (time in tenths of a
 // second, distance in decimetres, both cumulative *within the current
 // interval*) into absolute, whole-workout samples.
-func pointsFromStrokes(strokes []concept2.Stroke, sport string, start time.Time) []point {
+func pointsFromStrokes(strokes []concept2.Stroke, start time.Time) []point {
 	points := make([]point, 0, len(strokes))
 	var timeOffsetTenths, distOffsetDeci, lastT, lastD int
 	for i, s := range strokes {
@@ -117,7 +117,7 @@ func pointsFromStrokes(strokes []concept2.Stroke, sport string, start time.Time)
 			DistanceMeters: float64(absDeci) / 10.0,
 			HeartRateBpm:   s.HeartRate,
 			Cadence:        clampByte(s.StrokeRate),
-			Watts:          wattsFromPace(s.Pace, sport),
+			Watts:          WattsFromPace(s.Pace),
 		})
 		lastT, lastD = s.Time, s.Distance
 	}
@@ -127,8 +127,9 @@ func pointsFromStrokes(strokes []concept2.Stroke, sport string, start time.Time)
 // pointsFromSegments builds one trackpoint per interval/split, using each
 // segment's own (non-cumulative) time and distance to advance a running
 // total. This is coarser than stroke data but is all the API returns for
-// workouts recorded without per-stroke logging.
-func pointsFromSegments(segments []concept2.WorkoutSegment, start time.Time) []point {
+// workouts recorded without per-stroke logging. Watts are estimated from
+// each segment's own average pace (its time/distance ratio).
+func pointsFromSegments(segments []concept2.WorkoutSegment, start time.Time, splitDistanceMetres int) []point {
 	points := make([]point, 0, len(segments)+1)
 	points = append(points, point{Time: start, DistanceMeters: 0})
 
@@ -141,23 +142,52 @@ func pointsFromSegments(segments []concept2.WorkoutSegment, start time.Time) []p
 			DistanceMeters: float64(cumDist),
 			HeartRateBpm:   seg.HeartRate.Ending,
 			Cadence:        clampByte(seg.StrokeRate),
+			Watts:          WattsFromDistanceTime(seg.Distance, seg.Time, splitDistanceMetres),
 		})
 	}
 	return points
 }
 
-// wattsFromPace applies Concept2's published power formula,
-// watts = 2.80 / (pace/500)^3 (pace in seconds per 500m; e.g. a 2:00/500m
-// split is ~202W). It only applies to rower/skierg/dynamic ergs: BikeErg
-// reports pace per 1000m over a different drag curve that this formula
-// does not model, so bike results are left without a Watts value rather
-// than showing a misleading number.
-func wattsFromPace(paceTenthsPer500 int, sport string) int {
-	if paceTenthsPer500 <= 0 || sport == "bike" {
+// SplitDistanceMetres returns the reference distance Concept2 uses for a
+// machine's displayed "split"/pace: 500m for RowErg/SkiErg/dynamic, 1000m
+// for BikeErg. See WattsFromPace.
+func SplitDistanceMetres(c2Type string) int {
+	if c2Type == "bike" {
+		return 1000
+	}
+	return 500
+}
+
+// WattsFromDistanceTime derives a Concept2-style split (tenths of a second
+// per splitDistanceMetres) from a distance (metres) covered over a
+// duration (tenths of a second), then applies WattsFromPace. Useful for
+// estimating average power over an entire result or segment when only
+// distance/time totals are known (rather than stroke-by-stroke pace
+// samples). splitDistanceMetres must match the machine (see
+// SplitDistanceMetres) since BikeErg's split is defined per 1000m rather
+// than the 500m used by RowErg/SkiErg.
+func WattsFromDistanceTime(distanceMetres, timeTenths, splitDistanceMetres int) int {
+	if distanceMetres <= 0 || timeTenths <= 0 || splitDistanceMetres <= 0 {
 		return 0
 	}
-	paceSecondsPer500 := float64(paceTenthsPer500) / 10.0
-	watts := 2.80 / math.Pow(paceSecondsPer500/500.0, 3)
+	paceTenthsPerSplit := int(math.Round(float64(timeTenths) * float64(splitDistanceMetres) / float64(distanceMetres)))
+	return WattsFromPace(paceTenthsPerSplit)
+}
+
+// WattsFromPace applies Concept2's published power formula,
+// watts = 2.80 / (split/500)^3, where split is the pace value in seconds
+// as Concept2 itself defines and displays it: time per 500m for
+// RowErg/SkiErg, time per 1000m for BikeErg. The same formula and the same
+// "/500" divisor apply to both - Concept2 does not rescale BikeErg's split
+// before using it - so this works unchanged across machine types.
+// See https://www.concept2.com/training/watts-calculator and
+// https://ergarcade.com/articles/c2-pace-derivatives.
+func WattsFromPace(paceTenthsPer500 int) int {
+	if paceTenthsPer500 <= 0 {
+		return 0
+	}
+	paceSeconds := float64(paceTenthsPer500) / 10.0
+	watts := 2.80 / math.Pow(paceSeconds/500.0, 3)
 	return int(math.Round(watts))
 }
 
