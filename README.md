@@ -1,6 +1,6 @@
 # concept2upload
 
-Version 0.5.0 (see [CHANGELOG.md](CHANGELOG.md) for release notes).
+Version 0.5.1 (see [CHANGELOG.md](CHANGELOG.md) for release notes).
 
 A small Go CLI that talks to the [Concept2 Logbook API](https://log.concept2.com/developers/documentation/)
 to list your recent ergometer workouts and download one at a time as a
@@ -76,9 +76,11 @@ The examples below use `./dist/concept2upload` (a from-source build). If
 you installed via Homebrew, `concept2upload` is already on your `PATH` —
 drop the `./dist/` prefix.
 
-Save your token once — it's cached at `~/.config/concept2upload/concept2.token`
-(owner-only permissions) so you don't have to pass `--token` or set
-`CONCEPT2_TOKEN` again:
+Save your token once — it's cached in your OS's standard config directory
+(e.g. `~/Library/Application Support/concept2upload/concept2.token` on
+macOS, `~/.config/concept2upload/concept2.token` on Linux; owner-only
+permissions) so you don't have to pass `--token` or set `CONCEPT2_TOKEN`
+again:
 
 ```bash
 ./dist/concept2upload auth-concept2 your-access-token
@@ -170,10 +172,10 @@ project.
    export STRAVA_CLIENT_SECRET=your-client-secret
    ./dist/concept2upload auth-strava
    ```
-   Either way, they're only needed the first time — they're then cached at
-   `~/.config/concept2upload/strava.cfg` (owner-only permissions), the same
-   way your Concept2 token is cached, so later `auth-strava`/`upload-strava`
-   runs don't need them set again.
+   Either way, they're only needed the first time — they're then cached in
+   the same OS config directory as your Concept2 token (owner-only
+   permissions), so later `auth-strava`/`upload-strava` runs don't need
+   them set again.
 3. Upload a specific downloaded workout, by the position shown in `list`:
    ```bash
    ./dist/concept2upload upload-strava 1

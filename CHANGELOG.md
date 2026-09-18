@@ -5,6 +5,20 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.1] - 2026-09-18
+
+### Fixed
+
+- `concept2.TokenPath()` hardcoded `~/.config/concept2upload/...`
+  (Linux/XDG-style) instead of using `os.UserConfigDir()` like
+  `strava.TokenPath()`/`ConfigPath()` already did, so on macOS the
+  Concept2 token and Strava token/config ended up in two different
+  directories (`~/.config/...` vs `~/Library/Application Support/...`).
+  Both now use `os.UserConfigDir()` consistently. Bundled into the same
+  re-auth window as v0.5.0's rename - existing macOS users need to run
+  `auth-concept2 <token>` once more if they hadn't already re-authed
+  since the rename.
+
 ## [0.5.0] - 2026-09-18
 
 ### Changed
