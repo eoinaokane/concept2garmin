@@ -97,6 +97,9 @@ func TestSportFor(t *testing.T) {
 	if got := sportFor("skierg"); got != "Other" {
 		t.Errorf("sportFor(skierg) = %q, want Other", got)
 	}
+	if got := sportFor("dynamic"); got != "Other" {
+		t.Errorf("sportFor(dynamic) = %q, want Other", got)
+	}
 }
 
 func TestBuildNotes(t *testing.T) {
@@ -248,6 +251,96 @@ func TestLapsFromSegments(t *testing.T) {
 	firstPointLap1 := laps[1].Points[0]
 	if firstPointLap1.DistanceMeters != 1000 {
 		t.Errorf("lap 1 first point distance = %v, want 1000", firstPointLap1.DistanceMeters)
+	}
+}
+
+// TestBuild_DynamicType exercises the full conversion path (stroke data,
+// SplitDistanceMetres, sportFor, watts) for a "dynamic" (dynamic rower)
+// result - this machine type had never been run through Build with real or
+// synthetic data before.
+func TestBuild_DynamicType(t *testing.T) {
+	detail := concept2.ResultDetail{
+		Result: concept2.Result{
+			ID:            5,
+			Date:          "2026-09-18 12:00:00",
+			DateUTC:       "2026-09-18 12:00:00",
+			Distance:      2000,
+			Time:          4800,
+			CaloriesTotal: 200,
+			Type:          "dynamic",
+			HeartRate:     concept2.HeartRate{Average: 150},
+		},
+	}
+	detail.Strokes.Data = []concept2.Stroke{
+		{Time: 2400, Distance: 10000, Pace: 1200, StrokeRate: 22, HeartRate: 145},
+		{Time: 4800, Distance: 20000, Pace: 1200, StrokeRate: 22, HeartRate: 155},
+	}
+
+	body, err := Build(detail)
+	if err != nil {
+		t.Fatalf("Build returned error: %v", err)
+	}
+
+	var doc trainingCenterDatabase
+	if err := xml.Unmarshal(body, &doc); err != nil {
+		t.Fatalf("output is not well-formed XML: %v", err)
+	}
+
+	if got := doc.Activities.Activity.Sport; got != "Other" {
+		t.Errorf("Sport = %q, want Other", got)
+	}
+	if got := len(doc.Activities.Activity.Laps); got != 1 {
+		t.Fatalf("len(Laps) = %d, want 1", got)
+	}
+	lap := doc.Activities.Activity.Laps[0]
+	if lap.DistanceMeters != 2000 {
+		t.Errorf("DistanceMeters = %v, want 2000", lap.DistanceMeters)
+	}
+	// A dynamic rower uses the same 500m split as RowErg/SkiErg (not
+	// BikeErg's 1000m), so watts should come out the same as the
+	// WattsFromPace(1200) case tested above (203W), not the bike formula.
+	for _, tp := range lap.Track.Trackpoint {
+		if tp.Extensions == nil || tp.Extensions.TPX == nil {
+			continue
+		}
+		if got := tp.Extensions.TPX.Watts; got != 203 {
+			t.Errorf("trackpoint watts = %d, want 203", got)
+		}
+	}
+}
+
+// TestBuild_DynamicType_SegmentsOnly exercises the no-stroke-data fallback
+// (lapsFromSegments) for a "dynamic" result with only split summaries.
+func TestBuild_DynamicType_SegmentsOnly(t *testing.T) {
+	detail := concept2.ResultDetail{
+		Result: concept2.Result{
+			ID:            6,
+			Date:          "2026-09-18 12:00:00",
+			DateUTC:       "2026-09-18 12:00:00",
+			Distance:      2000,
+			Time:          4800,
+			CaloriesTotal: 200,
+			Type:          "dynamic",
+			Workout: concept2.Workout{
+				Splits: []concept2.WorkoutSegment{
+					{Time: 2400, Distance: 1000, CaloriesTotal: 100},
+					{Time: 2400, Distance: 1000, CaloriesTotal: 100},
+				},
+			},
+		},
+	}
+
+	body, err := Build(detail)
+	if err != nil {
+		t.Fatalf("Build returned error: %v", err)
+	}
+
+	var doc trainingCenterDatabase
+	if err := xml.Unmarshal(body, &doc); err != nil {
+		t.Fatalf("output is not well-formed XML: %v", err)
+	}
+	if got := len(doc.Activities.Activity.Laps); got != 2 {
+		t.Fatalf("len(Laps) = %d, want 2", got)
 	}
 }
 
