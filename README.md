@@ -1,6 +1,6 @@
 # concept2garmin
 
-Version 0.2.0 ([Semantic Versioning](https://semver.org/); see
+Version 0.2.1 ([Semantic Versioning](https://semver.org/); see
 [CHANGELOG.md](CHANGELOG.md) for release notes).
 
 A small Go CLI that talks to the [Concept2 Logbook API](https://log.concept2.com/developers/documentation/)
@@ -40,52 +40,21 @@ cd concept2garmin
 make build        # builds ./dist/concept2garmin
 ```
 
-## Status / handoff notes (as of commit `d44b239`)
+## Quick start
 
-Working and verified against a real Concept2 account/token:
+```bash
+concept2garmin auth your-access-token   # one-time, see Requirements below
+concept2garmin list                     # see your recent workouts, numbered
+concept2garmin get 1                    # download workout #1 as a .tcx file
+```
 
-- `auth`, `list`, `show`, `get` — all exercised end-to-end; output checked
-  by hand against the raw Concept2 API responses.
-- TCX export: multi-lap output, watts (both the stroke-level and
-  distance/time-estimate paths, for both BikeErg and RowErg), heart rate,
-  and cadence. Verified the watts fix by re-deriving a zone-distribution
-  table from the generated file by hand and confirming it matched the
-  workout's actual effort (a real bug was caught this way — see commit
-  `d44b239`'s message).
-- File-naming collision handling (`get` appends `-1`, `-2`, ... instead of
-  overwriting).
+See [Usage](#usage) below for the rest of the commands.
 
-Implemented but **not** exercised against a real account:
+## Changelog
 
-- `strava-auth` / `strava-upload`. The OAuth flow and upload code were
-  written and built successfully, but never run against an actual Strava
-  API application/account in this session — no live authorization, upload,
-  or `description` field has been confirmed to work end-to-end. Treat as
-  untested.
-
-Known gaps / things to look at next:
-
-- **Interval splitting only works for true interval workouts.** Lap
-  boundaries are currently detected by a reset in the raw stroke data's
-  cumulative time (`t` decreasing), which only happens for workouts with
-  rest between pieces (e.g. `VariableInterval`). A `FixedDistanceSplits`
-  workout (continuous piece, just distance markers, no rest) never resets,
-  so it still exports as a single `<Lap>` even though Concept2 reports
-  multiple `splits` for it. Fix would be to also split stroke data at the
-  cumulative-distance boundaries given by `Workout.Splits` when no
-  time-reset occurs.
-- **No automated tests.** `make test` runs `go test ./...`, but there are
-  no `_test.go` files yet — it passes trivially without checking anything.
-  The watts formula, the interval-reset/lap-splitting logic, and TCX field
-  ordering would all be good candidates for unit tests.
-- **`dynamic` (dynamic rower) machine type is untested** — the account
-  used for testing had no workouts of that type, so `SplitDistanceMetres`,
-  `sportFor`, etc. have only been exercised for `bike` and `rower`.
-- Multi-lap TCX has only been spot-checked with Python's `xml.dom.minidom`
-  (well-formedness) and a hand-written zone calculation — it has not been
-  round-tripped through an actual Garmin Connect or Strava import in this
-  session, so real-world import behavior (lap display, activity type,
-  etc.) is unconfirmed.
+See [CHANGELOG.md](CHANGELOG.md) for release history. Known gaps and
+planned work are tracked as
+[GitHub issues](https://github.com/eoinaokane/concept2garmin/issues).
 
 ## Requirements
 
@@ -103,6 +72,10 @@ also documented on the [developer docs](https://log.concept2.com/developers/docu
 site, but isn't needed for this tool.)
 
 ## Usage
+
+The examples below use `./dist/concept2garmin` (a from-source build). If
+you installed via Homebrew, `concept2garmin` is already on your `PATH` —
+drop the `./dist/` prefix.
 
 Save your token once — it's cached at `~/.config/concept2garmin/concept2.token`
 (owner-only permissions) so you don't have to pass `--token` or set

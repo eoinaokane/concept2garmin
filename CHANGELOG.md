@@ -5,6 +5,23 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.1] - 2026-09-18
+
+### Fixed
+
+- macOS release binaries are now ad-hoc code-signed at build time.
+  Apple Silicon refuses to execute a completely unsigned binary at all (a
+  hard kernel check, not just a Gatekeeper warning), so the v0.2.0
+  Homebrew cask was unusable on arm64 Macs (killed with SIGKILL/exit 137
+  on launch). Intel Macs and Linux were unaffected.
+
+### Changed
+
+- README: replaced the stale "Status / handoff notes" section (pinned to
+  a single old commit) with a pointer to `CHANGELOG.md` and GitHub
+  issues, and added a Quick start snippet right after the Install
+  section.
+
 ## [0.2.0] - 2026-09-18
 
 ### Added
