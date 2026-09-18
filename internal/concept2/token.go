@@ -6,15 +6,19 @@ import (
 	"strings"
 )
 
-// TokenPath returns ~/.config/concept2upload/concept2.token, where the
-// Concept2 API access token is cached between runs so it only needs to be
-// supplied once (via 'concept2upload auth-concept2 <token>' or --token/CONCEPT2_TOKEN).
+// TokenPath returns the file used to cache the Concept2 API access token
+// between runs, defaulting to $XDG_CONFIG_HOME/concept2upload/concept2.token
+// (or the platform equivalent via os.UserConfigDir - e.g. ~/Library/Application
+// Support/concept2upload/concept2.token on macOS), so it only needs to be
+// supplied once (via 'concept2upload auth-concept2 <token>' or
+// --token/CONCEPT2_TOKEN). This matches internal/strava's TokenPath/ConfigPath,
+// which use the same os.UserConfigDir approach.
 func TokenPath() (string, error) {
-	home, err := os.UserHomeDir()
+	dir, err := os.UserConfigDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".config", "concept2upload", "concept2.token"), nil
+	return filepath.Join(dir, "concept2upload", "concept2.token"), nil
 }
 
 // LoadStoredToken reads a previously saved token, if any.
