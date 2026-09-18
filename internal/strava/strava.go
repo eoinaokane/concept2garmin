@@ -29,6 +29,13 @@ const (
 	redirectPath = "/callback"
 )
 
+// userConfigDir is os.UserConfigDir, indirected so tests can override it.
+// os.UserConfigDir ignores $XDG_CONFIG_HOME on darwin (it always returns
+// $HOME/Library/Application Support there), so t.Setenv("XDG_CONFIG_HOME",
+// ...) alone does not isolate tests on macOS - it would otherwise read and
+// write a real user's actual saved Strava credentials during `go test`.
+var userConfigDir = os.UserConfigDir
+
 // Token is the OAuth token set persisted between runs.
 type Token struct {
 	AccessToken  string `json:"access_token"`
@@ -40,7 +47,7 @@ type Token struct {
 // defaulting to $XDG_CONFIG_HOME/concept2garmin/strava_token.json (or the
 // platform equivalent via os.UserConfigDir).
 func TokenPath() (string, error) {
-	dir, err := os.UserConfigDir()
+	dir, err := userConfigDir()
 	if err != nil {
 		return "", err
 	}
@@ -91,7 +98,7 @@ type Config struct {
 // $XDG_CONFIG_HOME/concept2garmin/strava.cfg (or the platform equivalent
 // via os.UserConfigDir).
 func ConfigPath() (string, error) {
-	dir, err := os.UserConfigDir()
+	dir, err := userConfigDir()
 	if err != nil {
 		return "", err
 	}
