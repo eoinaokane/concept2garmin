@@ -29,7 +29,7 @@ const defaultDir = "workout"
 // features, and backwards-compatible fixes respectively. Overridden at
 // release build time via -ldflags "-X main.version=..." (see
 // .goreleaser.yaml), so it must stay a var, not a const.
-var version = "0.2.3"
+var version = "0.3.0"
 
 func main() {
 	tokenFlag := &cli.StringFlag{

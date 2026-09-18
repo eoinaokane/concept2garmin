@@ -1,6 +1,6 @@
 # concept2garmin
 
-Version 0.2.3 (see [CHANGELOG.md](CHANGELOG.md) for release notes).
+Version 0.3.0 (see [CHANGELOG.md](CHANGELOG.md) for release notes).
 
 A small Go CLI that talks to the [Concept2 Logbook API](https://log.concept2.com/developers/documentation/)
 to list your recent ergometer workouts and download one at a time as a
@@ -143,8 +143,10 @@ Import the resulting `.tcx` file into Garmin Connect via
 **Import Data** on the Garmin Connect website, or drag-and-drop it onto
 Strava's **Upload Activity** page. Each Concept2 interval/split becomes its
 own `<Lap>` (with per-lap average/max heart rate and cadence), and the file
-carries a `<Notes>` crediting this project (plus your Concept2 comment, if
-you left one on the workout).
+carries a `<Notes>` summarizing the workout (type, distance, duration, avg
+power/heart rate — since Concept2's API has no title field of its own),
+plus your Concept2 comment if you left one, and a credit back to this
+project.
 
 ### Stretch: uploading straight to Strava
 

@@ -5,6 +5,17 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] - 2026-09-18
+
+### Added
+
+- Exported `.tcx` files now carry a human-readable summary line in
+  `<Notes>` (workout type, distance, duration, avg power, avg heart rate)
+  ahead of the Concept2 comment and attribution. Concept2's API has no
+  workout title field, so this is the closest thing to a name/description
+  the file gets, and Garmin Connect/Strava both display `<Notes>`
+  prominently on import.
+
 ## [0.2.3] - 2026-09-18
 
 ### Fixed

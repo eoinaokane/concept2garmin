@@ -7,6 +7,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"math"
+	"strings"
 	"time"
 
 	"github.com/eoinaokane/concept2garmin/internal/concept2"
@@ -22,14 +23,39 @@ const (
 	SourceURL = "https://github.com/eoinaokane/concept2garmin"
 )
 
-// buildNotes combines the workout's own Concept2 comment (if any) with a
-// short attribution back to SourceURL.
-func buildNotes(concept2Comment string) string {
-	attribution := "Exported from Concept2 via " + SourceURL
-	if concept2Comment == "" {
-		return attribution
+// buildNotes composes a human-readable summary of the workout (type,
+// distance, duration, and average power/heart rate when available),
+// followed by the workout's own Concept2 comment (if any) and a short
+// attribution back to SourceURL. Concept2's API has no dedicated workout
+// title field, and Garmin Connect/Strava both surface <Notes> prominently
+// on an imported activity, so this summary is the closest thing to a
+// name/description the exported file gets.
+func buildNotes(detail concept2.ResultDetail) string {
+	parts := []string{summaryLine(detail)}
+	if detail.Comments != "" {
+		parts = append(parts, detail.Comments)
 	}
-	return concept2Comment + "\n\n" + attribution
+	parts = append(parts, "Exported from Concept2 via "+SourceURL)
+	return strings.Join(parts, "\n\n")
+}
+
+// summaryLine renders one line like "VariableInterval — 13.1 km in 30:00.0,
+// avg 198 W, avg HR 142 bpm", omitting power/heart rate when unavailable.
+func summaryLine(detail concept2.ResultDetail) string {
+	workoutType := detail.WorkoutType
+	if workoutType == "" {
+		workoutType = "Workout"
+	}
+	km := float64(detail.Distance) / 1000.0
+	line := fmt.Sprintf("%s — %.1f km in %s", workoutType, km, detail.TimeFormatted)
+
+	if watts := WattsFromDistanceTime(detail.Distance, detail.Time, SplitDistanceMetres(detail.Type)); watts > 0 {
+		line += fmt.Sprintf(", avg %d W", watts)
+	}
+	if detail.HeartRate.Average > 0 {
+		line += fmt.Sprintf(", avg HR %d bpm", detail.HeartRate.Average)
+	}
+	return line
 }
 
 // point is an internal, unit-normalized representation of a single sample
@@ -98,7 +124,7 @@ func Build(detail concept2.ResultDetail) ([]byte, error) {
 				Sport: sportFor(detail.Type),
 				ID:    start.UTC().Format(time.RFC3339),
 				Laps:  xmlLaps,
-				Notes: buildNotes(detail.Comments),
+				Notes: buildNotes(detail),
 			},
 		},
 	}
