@@ -8,7 +8,7 @@ import (
 
 // TokenPath returns ~/.config/concept2garmin/concept2.token, where the
 // Concept2 API access token is cached between runs so it only needs to be
-// supplied once (via 'concept2garmin auth <token>' or --token/CONCEPT2_TOKEN).
+// supplied once (via 'concept2garmin auth-concept2 <token>' or --token/CONCEPT2_TOKEN).
 func TokenPath() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
