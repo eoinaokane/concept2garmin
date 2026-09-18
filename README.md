@@ -102,10 +102,28 @@ List your 10 most recent workouts, numbered 1 (most recent) upward:
 ```
 
 Show metadata for a single workout (by the position shown above) — date,
-type, distance, duration, calories, heart rate, etc.:
+type, distance, duration, calories, drag factor, cadence/stroke rate, avg
+power, heart rate, source, and segment count:
 
 ```bash
 ./dist/concept2garmin show 1
+```
+
+```
+Workout #1 (Concept2 id 123456789)
+Date:                              2026-09-18 12:31:00 (Europe/Dublin)
+Type:                              bike
+Workout type:                      VariableInterval
+Distance:                          13079 m
+Duration:                          30:00.0
+Calories:                          312 kcal
+Drag factor:                       132
+Avg cadence (rpm):                 87
+Avg power:                         198 W
+Heart rate:                        avg 142, max 167
+Source:                            ErgData
+Stroke-by-stroke data available:   yes
+Segments:                          4 intervals
 ```
 
 Download a single workout (by the position shown above) as a `.tcx` file
