@@ -1,0 +1,46 @@
+version: 2
+
+project_name: concept2garmin
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: concept2garmin
+    main: ./cmd/concept2garmin
+    binary: concept2garmin
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X main.version={{.Version}}
+
+archives:
+  - id: default
+    formats: [tar.gz]
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  disable: true
+
+homebrew_casks:
+  - name: concept2garmin
+    binaries:
+      - concept2garmin
+    repository:
+      owner: eoinaokane
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    directory: Casks
+    homepage: "https://github.com/eoinaokane/concept2garmin"
+    description: "List and download Concept2 logbook workouts as Garmin-compatible TCX files"

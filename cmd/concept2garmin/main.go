@@ -26,8 +26,10 @@ const defaultDir = "workout"
 
 // version follows Semantic Versioning (https://semver.org/): MAJOR.MINOR.PATCH,
 // incremented for incompatible CLI/API changes, backwards-compatible
-// features, and backwards-compatible fixes respectively.
-const version = "0.1.0"
+// features, and backwards-compatible fixes respectively. Overridden at
+// release build time via -ldflags "-X main.version=..." (see
+// .goreleaser.yaml), so it must stay a var, not a const.
+var version = "0.2.0"
 
 func main() {
 	tokenFlag := &cli.StringFlag{

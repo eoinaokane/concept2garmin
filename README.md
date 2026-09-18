@@ -1,6 +1,6 @@
 # concept2garmin
 
-Version 0.1.0 ([Semantic Versioning](https://semver.org/); see
+Version 0.2.0 ([Semantic Versioning](https://semver.org/); see
 [CHANGELOG.md](CHANGELOG.md) for release notes).
 
 A small Go CLI that talks to the [Concept2 Logbook API](https://log.concept2.com/developers/documentation/)
@@ -10,6 +10,35 @@ rower/SkiErg/dynamic pieces with stroke data — estimated watts).
 
 Uploading to Strava is included as a stretch feature, using Strava's own
 upload API and OAuth flow.
+
+## Prerequisites
+
+- A workout recorded on a Concept2 erg (RowErg, BikeErg, SkiErg, or
+  Dynamic) using the **ErgData** app on your phone, paired to the machine
+  over Bluetooth, with that workout synced to your online
+  [Concept2 Logbook](https://log.concept2.com/). This tool reads from your
+  Logbook account, not from the erg or the app directly, so the workout
+  needs to have made it there first.
+- A Concept2 Logbook API access token — see [Requirements](#requirements)
+  below for how to get one.
+
+## Install
+
+### Homebrew (macOS/Linux)
+
+```bash
+brew install --cask eoinaokane/tap/concept2garmin
+```
+
+### From source
+
+Requires Go 1.22+:
+
+```bash
+git clone https://github.com/eoinaokane/concept2garmin.git
+cd concept2garmin
+make build        # builds ./dist/concept2garmin
+```
 
 ## Status / handoff notes (as of commit `d44b239`)
 
@@ -60,16 +89,18 @@ Known gaps / things to look at next:
 
 ## Requirements
 
-- Go 1.22+
-- A Concept2 Logbook API access token (see their
-  [developer docs](https://log.concept2.com/developers/documentation/) for
-  how to obtain one)
+A Concept2 Logbook API access token. For personal use (this tool talks to
+your own account only), the simplest way to get one is a self-service
+long-lived token rather than registering a full OAuth app:
 
-## Build
+1. Log in at [log.concept2.com](https://log.concept2.com/).
+2. Go to **Edit Profile > Applications > Concept2 Logbook API
+   integration**.
+3. Generate a long-lived authorization token there and copy it.
 
-```bash
-make build        # builds ./dist/concept2garmin
-```
+(Registering an OAuth application — for apps serving multiple users — is
+also documented on the [developer docs](https://log.concept2.com/developers/documentation/)
+site, but isn't needed for this tool.)
 
 ## Usage
 
