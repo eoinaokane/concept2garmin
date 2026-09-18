@@ -78,6 +78,59 @@ func saveToken(t Token) error {
 	return os.WriteFile(path, body, 0o600)
 }
 
+// Config holds the Strava API application's Client ID/Secret (from
+// https://www.strava.com/settings/api), persisted so they only need to be
+// supplied once via --client-id/--client-secret or
+// STRAVA_CLIENT_ID/STRAVA_CLIENT_SECRET.
+type Config struct {
+	ClientID     string `json:"client_id"`
+	ClientSecret string `json:"client_secret"`
+}
+
+// ConfigPath returns the file used to persist Config, defaulting to
+// $XDG_CONFIG_HOME/concept2garmin/strava.cfg (or the platform equivalent
+// via os.UserConfigDir).
+func ConfigPath() (string, error) {
+	dir, err := os.UserConfigDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "concept2garmin", "strava.cfg"), nil
+}
+
+// LoadConfig reads a previously saved Config, if any.
+func LoadConfig() (Config, error) {
+	path, err := ConfigPath()
+	if err != nil {
+		return Config{}, err
+	}
+	body, err := os.ReadFile(path)
+	if err != nil {
+		return Config{}, err
+	}
+	var c Config
+	if err := json.Unmarshal(body, &c); err != nil {
+		return Config{}, err
+	}
+	return c, nil
+}
+
+// SaveConfig persists c to ConfigPath with owner-only permissions.
+func SaveConfig(c Config) error {
+	path, err := ConfigPath()
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	body, err := json.MarshalIndent(c, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, body, 0o600)
+}
+
 // Authorize runs the OAuth authorization-code flow: it prints (and tries to
 // open) the Strava consent URL, listens on localhost for the redirect, and
 // exchanges the returned code for an access/refresh token pair, which it
