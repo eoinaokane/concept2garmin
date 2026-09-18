@@ -390,7 +390,7 @@ func heartRateSummary(hr concept2.HeartRate, segments []concept2.WorkoutSegment)
 	if count == 0 {
 		return "n/a"
 	}
-	return fmt.Sprintf("avg %d, min %d, max %d bpm (derived from %d interval-ending readings; Concept2 reported no overall summary)", sum/count, min, max, count)
+	return fmt.Sprintf("avg %d, min %d, max %d bpm", sum/count, min, max)
 }
 
 func valueOr(s, fallback string) string {
