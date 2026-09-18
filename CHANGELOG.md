@@ -5,6 +5,22 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.4.0] - 2026-09-18
+
+### Changed
+
+- **Breaking**: renamed `auth` to `auth-concept2` and `strava-auth` to
+  `auth-strava`, so both authorization commands follow the same
+  `auth-<service>` naming (this project is pre-1.0, so breaking CLI
+  changes ship as minor bumps).
+- **Breaking**: `strava-upload` is now `upload-strava <position>`. It
+  previously bulk-uploaded every not-yet-uploaded entry across the whole
+  manifest with no way to target one workout; it now uploads exactly the
+  workout at the given `list` position (matching `get`/`show`'s existing
+  position-based selection), erroring clearly if that position hasn't
+  been downloaded yet or was already uploaded.
+- Confirmed working end-to-end against a real Strava account (closes #7).
+
 ## [0.3.0] - 2026-09-18
 
 ### Added

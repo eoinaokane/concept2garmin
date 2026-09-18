@@ -1,14 +1,14 @@
 # concept2garmin
 
-Version 0.3.0 (see [CHANGELOG.md](CHANGELOG.md) for release notes).
+Version 0.4.0 (see [CHANGELOG.md](CHANGELOG.md) for release notes).
 
 A small Go CLI that talks to the [Concept2 Logbook API](https://log.concept2.com/developers/documentation/)
 to list your recent ergometer workouts and download one at a time as a
 Garmin-compatible `.tcx` file (heart rate, cadence, and — for
 rower/SkiErg/dynamic pieces with stroke data — estimated watts).
 
-Uploading to Strava is included as a stretch feature, using Strava's own
-upload API and OAuth flow.
+It can also upload a downloaded workout straight to Strava, using
+Strava's own upload API and OAuth flow.
 
 ## Prerequisites
 
@@ -42,7 +42,7 @@ make build        # builds ./dist/concept2garmin
 ## Quick start
 
 ```bash
-concept2garmin auth your-access-token   # one-time, see Requirements below
+concept2garmin auth-concept2 your-access-token   # one-time, see Requirements below
 concept2garmin list                     # see your recent workouts, numbered
 concept2garmin get 1                    # download workout #1 as a .tcx file
 ```
@@ -81,12 +81,13 @@ Save your token once — it's cached at `~/.config/concept2garmin/concept2.token
 `CONCEPT2_TOKEN` again:
 
 ```bash
-./dist/concept2garmin auth your-access-token
+./dist/concept2garmin auth-concept2 your-access-token
 ```
 
 `--token`/`CONCEPT2_TOKEN` still work and take priority when set (and are
 themselves cached to that file for next time), so a one-off
-`--token ...` on any command also works without running `auth` first.
+`--token ...` on any command also works without running `auth-concept2`
+first.
 
 List your 10 most recent workouts, numbered 1 (most recent) upward:
 
@@ -148,25 +149,34 @@ power/heart rate — since Concept2's API has no title field of its own),
 plus your Concept2 comment if you left one, and a credit back to this
 project.
 
-### Stretch: uploading straight to Strava
+### Uploading straight to Strava
 
 1. Create a Strava API application at <https://www.strava.com/settings/api>
-   and note its Client ID and Client Secret.
+   and note its **Client ID** and **Client Secret**, shown near the top of
+   the app's page. Ignore **"Your Access Token"/"Your Refresh Token"**
+   further down that page — those are Strava's own quick-test tokens,
+   scoped read-only, and can't upload activities. This tool runs its own
+   OAuth flow (below) to get a token with the write access it actually
+   needs.
 2. Authorize once (opens your browser; you log in and grant access
-   yourself — this tool never sees your Strava password):
+   yourself — this tool never sees your Strava password), giving your
+   Client ID/Secret either as flags:
    ```bash
-   export STRAVA_CLIENT_ID=...
-   export STRAVA_CLIENT_SECRET=...
-   ./dist/concept2garmin strava-auth
+   ./dist/concept2garmin auth-strava --client-id=your-client-id --client-secret=your-client-secret
    ```
-   `--client-id`/`--client-secret` (or the env vars above) are only needed
-   the first time — they're then cached at
-   `~/.config/concept2garmin/strava.cfg` (owner-only permissions), the same
-   way your Concept2 token is cached, so later `strava-auth`/`strava-upload`
-   runs don't need them set again.
-3. Upload everything in `./workout/` that hasn't been uploaded yet:
+   or as environment variables:
    ```bash
-   ./dist/concept2garmin strava-upload
+   export STRAVA_CLIENT_ID=your-client-id
+   export STRAVA_CLIENT_SECRET=your-client-secret
+   ./dist/concept2garmin auth-strava
+   ```
+   Either way, they're only needed the first time — they're then cached at
+   `~/.config/concept2garmin/strava.cfg` (owner-only permissions), the same
+   way your Concept2 token is cached, so later `auth-strava`/`upload-strava`
+   runs don't need them set again.
+3. Upload a specific downloaded workout, by the position shown in `list`:
+   ```bash
+   ./dist/concept2garmin upload-strava 1
    ```
 
 ## How watts are computed

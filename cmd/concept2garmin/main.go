@@ -1,7 +1,7 @@
 // Command concept2garmin lists your Concept2 logbook workouts and
 // downloads a chosen one as a Garmin-compatible TCX file (with heart rate,
-// cadence, and watts where available). It can also, as a stretch feature,
-// upload previously downloaded TCX files to Strava.
+// cadence, and watts where available). It can also upload a downloaded
+// workout straight to Strava.
 package main
 
 import (
@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 
@@ -29,7 +28,7 @@ const defaultDir = "workout"
 // features, and backwards-compatible fixes respectively. Overridden at
 // release build time via -ldflags "-X main.version=..." (see
 // .goreleaser.yaml), so it must stay a var, not a const.
-var version = "0.3.0"
+var version = "0.4.0"
 
 func main() {
 	tokenFlag := &cli.StringFlag{
@@ -49,7 +48,7 @@ func main() {
 		Version: version,
 		Commands: []*cli.Command{
 			{
-				Name:      "auth",
+				Name:      "auth-concept2",
 				Usage:     "save your Concept2 API token locally so --token/CONCEPT2_TOKEN aren't needed every time",
 				ArgsUsage: "<token>",
 				Action:    runAuth,
@@ -88,8 +87,8 @@ func main() {
 				Action: runGet,
 			},
 			{
-				Name:  "strava-auth",
-				Usage: "(stretch) one-time OAuth authorization to allow uploads to your Strava account",
+				Name:  "auth-strava",
+				Usage: "one-time OAuth authorization to allow uploads to your Strava account",
 				Flags: []cli.Flag{
 					&cli.StringFlag{Name: "client-id", Sources: cli.EnvVars("STRAVA_CLIENT_ID")},
 					&cli.StringFlag{Name: "client-secret", Sources: cli.EnvVars("STRAVA_CLIENT_SECRET")},
@@ -97,8 +96,9 @@ func main() {
 				Action: runStravaAuth,
 			},
 			{
-				Name:  "strava-upload",
-				Usage: "(stretch) upload previously downloaded .tcx files in --dir to Strava",
+				Name:      "upload-strava",
+				Usage:     "upload one already-downloaded workout (by the position shown in 'list') to Strava",
+				ArgsUsage: "<position>",
 				Flags: []cli.Flag{
 					&cli.StringFlag{Name: "client-id", Sources: cli.EnvVars("STRAVA_CLIENT_ID")},
 					&cli.StringFlag{Name: "client-secret", Sources: cli.EnvVars("STRAVA_CLIENT_SECRET")},
@@ -117,7 +117,7 @@ func main() {
 
 func runAuth(ctx context.Context, cmd *cli.Command) error {
 	if cmd.Args().Len() != 1 {
-		return fmt.Errorf("expected exactly one argument: your Concept2 API token (e.g. 'concept2garmin auth abc123')")
+		return fmt.Errorf("expected exactly one argument: your Concept2 API token (e.g. 'concept2garmin auth-concept2 abc123')")
 	}
 	if err := concept2.SaveToken(cmd.Args().First()); err != nil {
 		return fmt.Errorf("saving token: %w", err)
@@ -129,7 +129,7 @@ func runAuth(ctx context.Context, cmd *cli.Command) error {
 
 // resolveToken prefers an explicit --token flag (or CONCEPT2_TOKEN env var,
 // which the flag is already sourced from), persisting it for next time, and
-// otherwise falls back to a token saved earlier via 'concept2garmin auth'.
+// otherwise falls back to a token saved earlier via 'concept2garmin auth-concept2'.
 func resolveToken(cmd *cli.Command) (string, error) {
 	if t := strings.TrimSpace(cmd.String("token")); t != "" {
 		if err := concept2.SaveToken(t); err != nil {
@@ -140,7 +140,7 @@ func resolveToken(cmd *cli.Command) (string, error) {
 	if t, err := concept2.LoadStoredToken(); err == nil && t != "" {
 		return t, nil
 	}
-	return "", fmt.Errorf("no Concept2 token found; run 'concept2garmin auth <token>' or pass --token/CONCEPT2_TOKEN")
+	return "", fmt.Errorf("no Concept2 token found; run 'concept2garmin auth-concept2 <token>' or pass --token/CONCEPT2_TOKEN")
 }
 
 // resolveStravaCredentials prefers explicit --client-id/--client-secret
@@ -488,6 +488,23 @@ func resolvePosition(client *concept2.Client, dir string, position, limit int) (
 	return results[position-1].ID, nil
 }
 
+// resolvePositionFromCache resolves a position to its cached Concept2
+// result ID using only the last 'list' run's cache in dir. Unlike
+// resolvePosition, it never contacts the Concept2 API, since a caller like
+// upload-strava only needs a file that's already been downloaded - it has
+// no need for network access to Concept2 at all.
+func resolvePositionFromCache(dir string, position int) (int64, error) {
+	c, ok := loadListCache(dir)
+	if !ok {
+		return 0, fmt.Errorf("no cached 'list' result found in %s; run 'concept2garmin list' first", dir)
+	}
+	item, ok := c.Positions[fmt.Sprintf("%d", position)]
+	if !ok {
+		return 0, fmt.Errorf("position %d not found in the last 'list' result", position)
+	}
+	return item.ResultID, nil
+}
+
 // sensibleFileName produces a human-readable name like
 // "2026-09-18-Bike-30min-13.1km.tcx" rather than exposing the raw result ID.
 // The duration is derived from TimeFormatted (total elapsed time, the same
@@ -620,51 +637,57 @@ func runStravaAuth(ctx context.Context, cmd *cli.Command) error {
 }
 
 func runStravaUpload(ctx context.Context, cmd *cli.Command) error {
+	if cmd.Args().Len() != 1 {
+		return fmt.Errorf("expected exactly one argument: the position from 'list' (e.g. 'concept2garmin upload-strava 1')")
+	}
+	position, err := parsePosition(cmd.Args().First())
+	if err != nil {
+		return err
+	}
 	dir := cmd.String("dir")
-	clientID, clientSecret, err := resolveStravaCredentials(cmd)
+
+	resultID, err := resolvePositionFromCache(dir, position)
 	if err != nil {
 		return err
 	}
 
 	m := loadManifest(dir)
+	key := fmt.Sprintf("%d", resultID)
+	entry, ok := m.Entries[key]
+	if !ok || entry.File == "" {
+		return fmt.Errorf("workout at position %d hasn't been downloaded yet; run 'concept2garmin get %d' first", position, position)
+	}
+	if entry.UploadedToStrava {
+		fmt.Printf("%s was already uploaded to Strava (activity %d); nothing to do.\n", entry.File, entry.StravaActivityID)
+		return nil
+	}
+	fullPath := filepath.Join(dir, entry.File)
+	if _, err := os.Stat(fullPath); err != nil {
+		return fmt.Errorf("%s: %w", fullPath, err)
+	}
+
+	clientID, clientSecret, err := resolveStravaCredentials(cmd)
+	if err != nil {
+		return err
+	}
 	accessToken, err := strava.AccessToken(clientID, clientSecret)
 	if err != nil {
-		return fmt.Errorf("run 'concept2garmin strava-auth' first: %w", err)
+		return fmt.Errorf("run 'concept2garmin auth-strava' first: %w", err)
 	}
 
-	// Deterministic order so re-runs behave predictably.
-	keys := make([]string, 0, len(m.Entries))
-	for k := range m.Entries {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-
-	uploaded := 0
-	for _, key := range keys {
-		entry := m.Entries[key]
-		if entry.UploadedToStrava || entry.File == "" {
-			continue
-		}
-		fullPath := filepath.Join(dir, entry.File)
-
-		fmt.Printf("uploading %s...\n", entry.File)
-		result, err := strava.UploadTCX(accessToken, fullPath, strings.TrimSuffix(entry.File, ".tcx"), "Uploaded via "+tcx.SourceURL, activityTypeFromFileName(entry.File))
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "warning: failed to upload %s: %v\n", entry.File, err)
-			continue
-		}
-
-		entry.UploadedToStrava = true
-		entry.StravaActivityID = result.ActivityID
-		m.Entries[key] = entry
-		uploaded++
-		fmt.Printf("  -> Strava activity %d\n", result.ActivityID)
+	fmt.Printf("uploading %s...\n", entry.File)
+	result, err := strava.UploadTCX(accessToken, fullPath, strings.TrimSuffix(entry.File, ".tcx"), "Uploaded via "+tcx.SourceURL, activityTypeFromFileName(entry.File))
+	if err != nil {
+		return fmt.Errorf("uploading %s: %w", entry.File, err)
 	}
 
+	entry.UploadedToStrava = true
+	entry.StravaActivityID = result.ActivityID
+	m.Entries[key] = entry
 	if err := saveManifest(dir, m); err != nil {
 		return err
 	}
-	fmt.Printf("done: %d activit(y/ies) uploaded to Strava\n", uploaded)
+	fmt.Printf("-> Strava activity %d\n", result.ActivityID)
 	return nil
 }
 
