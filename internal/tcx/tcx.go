@@ -121,7 +121,19 @@ func buildLaps(detail concept2.ResultDetail, start time.Time) []lapData {
 	}
 
 	if len(detail.Strokes.Data) > 0 {
-		laps := lapsFromStrokes(detail.Strokes.Data, start)
+		// Interval workouts (with rest between pieces) already get one lap
+		// per interval from the time resets in the raw stroke data handled
+		// by lapsFromStrokes below. A FixedDistanceSplits workout (a single
+		// continuous piece, just distance markers, no rest) never resets,
+		// so pass Splits' cumulative distances as extra lap boundaries in
+		// that case - but only when there are no Intervals, since Interval
+		// boundaries are already handled by the time resets and don't
+		// necessarily land on evenly divided distances.
+		var splitBoundaries []int
+		if len(detail.Workout.Intervals) == 0 {
+			splitBoundaries = cumulativeDeciBoundaries(detail.Workout.Splits)
+		}
+		laps := lapsFromStrokes(detail.Strokes.Data, start, splitBoundaries)
 		// Concept2's own interval/split totals are more precise than what
 		// we can derive from stroke samples (which are only reported to
 		// the nearest tenth of a second/decimetre), so prefer them when
@@ -144,12 +156,18 @@ func buildLaps(detail concept2.ResultDetail, start time.Time) []lapData {
 // lapsFromStrokes converts stroke-level samples (time in tenths of a
 // second, distance in decimetres, both cumulative *within the current
 // interval*) into one lap per interval, with absolute whole-workout
-// timestamps and distances.
-func lapsFromStrokes(strokes []concept2.Stroke, start time.Time) []lapData {
+// timestamps and distances. splitBoundariesDeci additionally splits a
+// continuous (non-resetting) piece into laps at those cumulative distances
+// - see cumulativeDeciBoundaries - for workouts recorded without rest but
+// with distance markers (FixedDistanceSplits); pass nil when the source
+// segments are Intervals, whose boundaries are already handled by the time
+// resets below.
+func lapsFromStrokes(strokes []concept2.Stroke, start time.Time, splitBoundariesDeci []int) []lapData {
 	var laps []lapData
 	var curPoints []point
 	var timeOffsetTenths, distOffsetDeci, lastT, lastD int
 	lapStartTenths, lapStartDeci := 0, 0
+	boundaryIdx := 0
 
 	flush := func() {
 		if len(curPoints) == 0 {
@@ -175,6 +193,9 @@ func lapsFromStrokes(strokes []concept2.Stroke, start time.Time) []lapData {
 			flush()
 			timeOffsetTenths += lastT
 			distOffsetDeci += lastD
+			if boundaryIdx < len(splitBoundariesDeci) {
+				boundaryIdx++
+			}
 		}
 		absTenths := timeOffsetTenths + s.Time
 		absDeci := distOffsetDeci + s.Distance
@@ -187,9 +208,31 @@ func lapsFromStrokes(strokes []concept2.Stroke, start time.Time) []lapData {
 			Watts:          WattsFromPace(s.Pace),
 		})
 		lastT, lastD = s.Time, s.Distance
+
+		if boundaryIdx < len(splitBoundariesDeci) && absDeci >= splitBoundariesDeci[boundaryIdx] {
+			flush()
+			boundaryIdx++
+		}
 	}
 	flush()
 	return laps
+}
+
+// cumulativeDeciBoundaries returns the running total of segments' distances
+// in decimetres, matching the unit lapsFromStrokes accumulates stroke
+// distance in, so a FixedDistanceSplits workout's split markers can be
+// compared directly against each stroke's cumulative distance.
+func cumulativeDeciBoundaries(segments []concept2.WorkoutSegment) []int {
+	if len(segments) == 0 {
+		return nil
+	}
+	boundaries := make([]int, len(segments))
+	cum := 0
+	for i, seg := range segments {
+		cum += seg.Distance * 10
+		boundaries[i] = cum
+	}
+	return boundaries
 }
 
 // segmentSampleTenths is how often (tenths of a second) lapsFromSegments
