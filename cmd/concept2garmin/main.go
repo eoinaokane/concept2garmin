@@ -306,51 +306,91 @@ func printWorkoutMetadata(position int, d concept2.ResultDetail) {
 	}
 
 	fmt.Printf("Workout #%d (Concept2 id %d)\n", position, d.ID)
-	fmt.Printf("Date:            %s\n", dateStr)
-	fmt.Printf("Type:            %s\n", machineLabel(d.Type))
-	fmt.Printf("Workout type:    %s\n", valueOr(d.WorkoutType, "n/a"))
-	fmt.Printf("Distance:        %d m\n", d.Distance)
-	fmt.Printf("Duration:        %s\n", d.TimeFormatted)
-	fmt.Printf("Calories:        %d kcal\n", d.CaloriesTotal)
-	fmt.Printf("Drag factor:     %s\n", intOr(d.DragFactor, "n/a"))
-	fmt.Printf("Avg stroke rate: %s\n", intOr(d.StrokeRate, "n/a"))
-	fmt.Printf("Heart rate:      %s\n", heartRateSummary(d.HeartRate))
-	fmt.Printf("Source:          %s\n", valueOr(d.Source, "n/a"))
-	fmt.Printf("Stroke-by-stroke data available: %s\n", yesNo(d.StrokeData))
+	printField("Date", dateStr)
+	printField("Type", machineLabel(d.Type))
+	printField("Workout type", valueOr(d.WorkoutType, "n/a"))
+	printField("Distance", fmt.Sprintf("%d m", d.Distance))
+	printField("Duration", d.TimeFormatted)
+	printField("Calories", fmt.Sprintf("%d kcal", d.CaloriesTotal))
+	printField("Drag factor", intOr(d.DragFactor, "n/a"))
+	printField(cadenceLabel(d.Type), intOr(d.StrokeRate, "n/a"))
 
 	segments := d.Workout.Intervals
-	label := "intervals"
+	segmentKind := "intervals"
 	if len(segments) == 0 {
 		segments = d.Workout.Splits
-		label = "splits"
+		segmentKind = "splits"
 	}
+
+	printField("Heart rate", heartRateSummary(d.HeartRate, segments))
+	printField("Source", valueOr(d.Source, "n/a"))
+	printField("Stroke-by-stroke data available", yesNo(d.StrokeData))
+
 	if len(segments) > 0 {
-		fmt.Printf("Segments:        %d %s\n", len(segments), label)
+		printField("Segments", fmt.Sprintf("%d %s", len(segments), segmentKind))
 	}
 
 	if d.Comments != "" {
-		fmt.Printf("Comments:        %s\n", d.Comments)
+		printField("Comments", d.Comments)
 	}
 }
 
-func heartRateSummary(hr concept2.HeartRate) string {
-	if hr.Average == 0 && hr.Min == 0 && hr.Max == 0 && hr.Ending == 0 {
+func printField(label, value string) {
+	fmt.Printf("%-34s %s\n", label+":", value)
+}
+
+// cadenceLabel picks the right term for a machine's revolution rate:
+// rowers/SkiErgs report strokes per minute, but BikeErg reports pedal
+// cadence in RPM, not a "stroke rate".
+func cadenceLabel(c2Type string) string {
+	if c2Type == "bike" {
+		return "Avg cadence (rpm)"
+	}
+	return "Avg stroke rate (spm)"
+}
+
+// heartRateSummary prefers the API's whole-workout heart rate summary.
+// Concept2 sometimes omits that (notably for interval workouts) while still
+// returning an "ending" heart rate per interval/split, so this falls back
+// to deriving avg/min/max from those instead of reporting "n/a" when heart
+// rate data does exist, just not as a top-level summary.
+func heartRateSummary(hr concept2.HeartRate, segments []concept2.WorkoutSegment) string {
+	if hr.Average > 0 || hr.Min > 0 || hr.Max > 0 || hr.Ending > 0 {
+		parts := []string{}
+		if hr.Average > 0 {
+			parts = append(parts, fmt.Sprintf("avg %d", hr.Average))
+		}
+		if hr.Min > 0 {
+			parts = append(parts, fmt.Sprintf("min %d", hr.Min))
+		}
+		if hr.Max > 0 {
+			parts = append(parts, fmt.Sprintf("max %d", hr.Max))
+		}
+		if hr.Ending > 0 {
+			parts = append(parts, fmt.Sprintf("ending %d", hr.Ending))
+		}
+		return strings.Join(parts, ", ") + " bpm"
+	}
+
+	var sum, min, max, count int
+	for _, seg := range segments {
+		e := seg.HeartRate.Ending
+		if e <= 0 {
+			continue
+		}
+		if min == 0 || e < min {
+			min = e
+		}
+		if e > max {
+			max = e
+		}
+		sum += e
+		count++
+	}
+	if count == 0 {
 		return "n/a"
 	}
-	parts := []string{}
-	if hr.Average > 0 {
-		parts = append(parts, fmt.Sprintf("avg %d", hr.Average))
-	}
-	if hr.Min > 0 {
-		parts = append(parts, fmt.Sprintf("min %d", hr.Min))
-	}
-	if hr.Max > 0 {
-		parts = append(parts, fmt.Sprintf("max %d", hr.Max))
-	}
-	if hr.Ending > 0 {
-		parts = append(parts, fmt.Sprintf("ending %d", hr.Ending))
-	}
-	return strings.Join(parts, ", ") + " bpm"
+	return fmt.Sprintf("avg %d, min %d, max %d bpm (derived from %d interval-ending readings; Concept2 reported no overall summary)", sum/count, min, max, count)
 }
 
 func valueOr(s, fallback string) string {
