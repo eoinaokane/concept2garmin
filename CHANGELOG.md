@@ -5,6 +5,19 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.2] - 2026-09-18
+
+### Fixed
+
+- v0.2.1's ad-hoc signing turned out insufficient: macOS's Gatekeeper
+  (`syspolicyd`) still ran an XProtect scan on the unnotarized binary and
+  silently moved it to Trash after showing an approval prompt nothing
+  could answer non-interactively (confirmed via the unified log). Real
+  Developer ID signing and notarization (via `quill`, wired through
+  GoReleaser's `notarize` config) now runs as part of the release
+  pipeline, so the Homebrew cask actually launches on a clean macOS
+  install without any manual Gatekeeper workaround.
+
 ## [0.2.1] - 2026-09-18
 
 ### Fixed

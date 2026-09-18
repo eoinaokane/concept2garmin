@@ -20,12 +20,24 @@ builds:
       - arm64
     ldflags:
       - -s -w -X main.version={{.Version}}
-    hooks:
-      # macOS refuses to execute a completely unsigned arm64/amd64 binary
-      # at all (a hard kernel-level check, not just a Gatekeeper warning),
-      # so ad-hoc sign every darwin build; other GOOS targets are a no-op.
-      post:
-        - cmd: sh -c 'case "{{ .Target }}" in darwin_*) codesign --force --sign - "{{ .Path }}" ;; esac'
+
+# Ad-hoc signing alone isn't enough: macOS's syspolicyd runs an XProtect
+# scan on any unnotarized downloaded binary and silently trashes it if
+# nothing answers the (non-interactive, so unanswerable) Gatekeeper
+# prompt. Real Developer ID signing + notarization is required for a
+# downloaded macOS binary to actually run. Uses quill under the hood.
+notarize:
+  macos:
+    - enabled: '{{ isEnvSet "MACOS_SIGN_P12" }}'
+      sign:
+        certificate: "{{.Env.MACOS_SIGN_P12}}"
+        password: "{{.Env.MACOS_SIGN_PASSWORD}}"
+      notarize:
+        issuer_id: "{{.Env.MACOS_NOTARY_ISSUER_ID}}"
+        key_id: "{{.Env.MACOS_NOTARY_KEY_ID}}"
+        key: "{{.Env.MACOS_NOTARY_KEY}}"
+        wait: true
+        timeout: 10m
 
 archives:
   - id: default
