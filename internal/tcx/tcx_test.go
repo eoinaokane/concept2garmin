@@ -102,6 +102,40 @@ func TestSportFor(t *testing.T) {
 	}
 }
 
+func TestWorkoutTypeLabel(t *testing.T) {
+	cases := []struct {
+		c2Type, workoutType, want string
+	}{
+		{"bike", "JustRow", "JustRide"},
+		{"bike", "VariableInterval", "VariableInterval"},
+		{"rower", "JustRow", "JustRow"},
+		{"skierg", "JustRow", "JustRow"},
+	}
+	for _, c := range cases {
+		if got := workoutTypeLabel(c.c2Type, c.workoutType); got != c.want {
+			t.Errorf("workoutTypeLabel(%q, %q) = %q, want %q", c.c2Type, c.workoutType, got, c.want)
+		}
+	}
+}
+
+func TestBuildNotes_RemapsBikeJustRow(t *testing.T) {
+	detail := concept2.ResultDetail{
+		Result: concept2.Result{
+			WorkoutType:   "JustRow",
+			Distance:      742,
+			TimeFormatted: "2:23.8",
+			Type:          "bike",
+		},
+	}
+	got := buildNotes(detail)
+	if strings.Contains(got, "JustRow") {
+		t.Errorf("buildNotes result still contains JustRow for a bike result: %q", got)
+	}
+	if !strings.Contains(got, "JustRide") {
+		t.Errorf("buildNotes result missing JustRide for a bike result: %q", got)
+	}
+}
+
 func TestBuildNotes(t *testing.T) {
 	detail := concept2.ResultDetail{
 		Result: concept2.Result{

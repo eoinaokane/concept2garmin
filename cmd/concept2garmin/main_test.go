@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/eoinaokane/concept2garmin/internal/concept2"
@@ -33,6 +34,23 @@ func TestCadenceLabel(t *testing.T) {
 	}
 	if got := cadenceLabel("dynamic"); got != "Avg stroke rate (spm)" {
 		t.Errorf("cadenceLabel(dynamic) = %q", got)
+	}
+}
+
+func TestWorkoutTypeLabel(t *testing.T) {
+	cases := []struct {
+		c2Type, workoutType, want string
+	}{
+		{"bike", "JustRow", "JustRide"},
+		{"bike", "VariableInterval", "VariableInterval"},
+		{"rower", "JustRow", "JustRow"},
+		{"skierg", "JustRow", "JustRow"},
+		{"bike", "", ""},
+	}
+	for _, c := range cases {
+		if got := workoutTypeLabel(c.c2Type, c.workoutType); got != c.want {
+			t.Errorf("workoutTypeLabel(%q, %q) = %q, want %q", c.c2Type, c.workoutType, got, c.want)
+		}
 	}
 }
 
@@ -128,6 +146,24 @@ func TestElapsedMinutes(t *testing.T) {
 		if diff := got - c.want; diff > 0.001 || diff < -0.001 {
 			t.Errorf("elapsedMinutes(%q, %d) = %v, want %v", c.formatted, c.rawTenths, got, c.want)
 		}
+	}
+}
+
+func TestSummaryLine_RemapsBikeJustRow(t *testing.T) {
+	r := concept2.Result{
+		Date:          "2026-09-07 06:56:00",
+		Timezone:      "UTC",
+		Type:          "bike",
+		Distance:      742,
+		TimeFormatted: "2:23.8",
+		WorkoutType:   "JustRow",
+	}
+	got := summaryLine(r)
+	if strings.Contains(got, "JustRow") {
+		t.Errorf("summaryLine() still contains JustRow for a bike result: %q", got)
+	}
+	if !strings.Contains(got, "JustRide") {
+		t.Errorf("summaryLine() missing JustRide for a bike result: %q", got)
 	}
 }
 

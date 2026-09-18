@@ -42,7 +42,7 @@ func buildNotes(detail concept2.ResultDetail) string {
 // summaryLine renders one line like "VariableInterval — 13.1 km in 30:00.0,
 // avg 198 W, avg HR 142 bpm", omitting power/heart rate when unavailable.
 func summaryLine(detail concept2.ResultDetail) string {
-	workoutType := detail.WorkoutType
+	workoutType := workoutTypeLabel(detail.Type, detail.WorkoutType)
 	if workoutType == "" {
 		workoutType = "Workout"
 	}
@@ -437,6 +437,17 @@ func sportFor(c2Type string) string {
 		return "Biking"
 	}
 	return "Other"
+}
+
+// workoutTypeLabel remaps Concept2's generic "JustRow" workout_type label to
+// something bike-appropriate when the machine is a BikeErg. Concept2's own
+// API reports "JustRow" for BikeErg free sessions too - the same label it
+// uses for RowErg/SkiErg free sessions - which reads oddly for a bike ride.
+func workoutTypeLabel(c2Type, workoutType string) string {
+	if c2Type == "bike" && workoutType == "JustRow" {
+		return "JustRide"
+	}
+	return workoutType
 }
 
 func renderTrackpoints(points []point) []trackpoint {

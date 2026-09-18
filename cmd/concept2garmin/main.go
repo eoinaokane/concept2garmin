@@ -211,7 +211,18 @@ func summaryLine(r concept2.Result) string {
 	if err == nil {
 		dateStr = start.Format("2006-01-02 15:04")
 	}
-	return fmt.Sprintf("%-16s %-8s %6dm  %10s  %s", dateStr, r.Type, r.Distance, r.TimeFormatted, r.WorkoutType)
+	return fmt.Sprintf("%-16s %-8s %6dm  %10s  %s", dateStr, r.Type, r.Distance, r.TimeFormatted, workoutTypeLabel(r.Type, r.WorkoutType))
+}
+
+// workoutTypeLabel remaps Concept2's generic "JustRow" workout_type label to
+// something bike-appropriate when the machine is a BikeErg. Concept2's own
+// API reports "JustRow" for BikeErg free sessions too - the same label it
+// uses for RowErg/SkiErg free sessions - which reads oddly for a bike ride.
+func workoutTypeLabel(c2Type, workoutType string) string {
+	if c2Type == "bike" && workoutType == "JustRow" {
+		return "JustRide"
+	}
+	return workoutType
 }
 
 func runList(ctx context.Context, cmd *cli.Command) error {
@@ -335,7 +346,7 @@ func printWorkoutMetadata(position int, d concept2.ResultDetail) {
 	fmt.Printf("Workout #%d (Concept2 id %d)\n", position, d.ID)
 	printField("Date", dateStr)
 	printField("Type", machineLabel(d.Type))
-	printField("Workout type", valueOr(d.WorkoutType, "n/a"))
+	printField("Workout type", valueOr(workoutTypeLabel(d.Type, d.WorkoutType), "n/a"))
 	printField("Distance", fmt.Sprintf("%d m", d.Distance))
 	printField("Duration", d.TimeFormatted)
 	printField("Calories", fmt.Sprintf("%d kcal", d.CaloriesTotal))
