@@ -49,14 +49,14 @@ type Token struct {
 }
 
 // TokenPath returns the file used to persist the Strava OAuth token,
-// defaulting to $XDG_CONFIG_HOME/concept2garmin/strava_token.json (or the
+// defaulting to $XDG_CONFIG_HOME/concept2upload/strava_token.json (or the
 // platform equivalent via os.UserConfigDir).
 func TokenPath() (string, error) {
 	dir, err := userConfigDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(dir, "concept2garmin", "strava_token.json"), nil
+	return filepath.Join(dir, "concept2upload", "strava_token.json"), nil
 }
 
 func loadToken() (Token, error) {
@@ -100,14 +100,14 @@ type Config struct {
 }
 
 // ConfigPath returns the file used to persist Config, defaulting to
-// $XDG_CONFIG_HOME/concept2garmin/strava.cfg (or the platform equivalent
+// $XDG_CONFIG_HOME/concept2upload/strava.cfg (or the platform equivalent
 // via os.UserConfigDir).
 func ConfigPath() (string, error) {
 	dir, err := userConfigDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(dir, "concept2garmin", "strava.cfg"), nil
+	return filepath.Join(dir, "concept2upload", "strava.cfg"), nil
 }
 
 // LoadConfig reads a previously saved Config, if any.

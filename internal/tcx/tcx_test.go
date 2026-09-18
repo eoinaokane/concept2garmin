@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/eoinaokane/concept2garmin/internal/concept2"
+	"github.com/eoinaokane/concept2upload/internal/concept2"
 )
 
 func TestWattsFromPace(t *testing.T) {

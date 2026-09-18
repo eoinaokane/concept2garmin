@@ -1,5 +1,5 @@
-BINARY := concept2garmin
-CMD    := ./cmd/concept2garmin
+BINARY := concept2upload
+CMD    := ./cmd/concept2upload
 DIST   := dist
 
 .PHONY: all build run test vet fmt fmt-check tidy clean install

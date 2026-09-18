@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/eoinaokane/concept2garmin/internal/concept2"
+	"github.com/eoinaokane/concept2upload/internal/concept2"
 )
 
 func TestMachineLabel(t *testing.T) {

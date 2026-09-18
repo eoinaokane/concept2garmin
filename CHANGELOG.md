@@ -5,6 +5,26 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.0] - 2026-09-18
+
+### Changed
+
+- **Breaking**: renamed the project from `concept2garmin` to
+  `concept2upload` (closes #23) — "Garmin" undersold the tool once it
+  also gained Strava upload support. This affects:
+  - The GitHub repo: `eoinaokane/concept2garmin` → `eoinaokane/concept2upload`
+    (GitHub redirects the old URL, but clone/remote URLs should be
+    updated to the new one).
+  - The Go module path and binary name: `concept2garmin` → `concept2upload`.
+  - The Homebrew cask: `eoinaokane/tap/concept2garmin` →
+    `eoinaokane/tap/concept2upload`.
+  - The local config directory: `~/.config/concept2garmin/` →
+    `~/.config/concept2upload/` — existing users need to re-run
+    `auth-concept2`/`auth-strava` once, since saved tokens won't carry
+    over to the new path automatically.
+  - The `SourceURL` attribution baked into every exported `.tcx`'s
+    `<Notes>` field now points at the new repo URL.
+
 ## [0.4.0] - 2026-09-18
 
 ### Changed
