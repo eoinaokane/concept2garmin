@@ -23,10 +23,15 @@ import (
 
 const (
 	authorizeURL = "https://www.strava.com/oauth/authorize"
-	tokenURL     = "https://www.strava.com/oauth/token"
-	uploadsURL   = "https://www.strava.com/api/v3/uploads"
 	redirectAddr = "127.0.0.1:8721"
 	redirectPath = "/callback"
+)
+
+// tokenURL and uploadsURL are vars (rather than consts) so tests can point
+// them at an httptest server.
+var (
+	tokenURL   = "https://www.strava.com/oauth/token"
+	uploadsURL = "https://www.strava.com/api/v3/uploads"
 )
 
 // Token is the OAuth token set persisted between runs.
@@ -308,6 +313,9 @@ func pollUpload(accessToken string, uploadID int64) (UploadResult, error) {
 		resp.Body.Close()
 		if err != nil {
 			return UploadResult{}, err
+		}
+		if resp.StatusCode != http.StatusOK {
+			return UploadResult{}, fmt.Errorf("strava: upload status check returned %s: %s", resp.Status, string(body))
 		}
 
 		var status struct {
