@@ -1,5 +1,8 @@
 # concept2garmin
 
+Version 0.1.0 ([Semantic Versioning](https://semver.org/); see
+[CHANGELOG.md](CHANGELOG.md) for release notes).
+
 A small Go CLI that talks to the [Concept2 Logbook API](https://log.concept2.com/developers/documentation/)
 to list your recent ergometer workouts and download one at a time as a
 Garmin-compatible `.tcx` file (heart rate, cadence, and — for
