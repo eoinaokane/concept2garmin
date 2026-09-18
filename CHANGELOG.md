@@ -5,6 +5,43 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.3] - 2026-09-18
+
+### Fixed
+
+- v0.2.1's ad-hoc signing turned out insufficient: macOS's Gatekeeper
+  (`syspolicyd`) still ran an XProtect scan on the unnotarized binary and
+  silently moved it to Trash after showing an approval prompt nothing
+  could answer non-interactively (confirmed via the unified log). Real
+  Developer ID signing and notarization (via `quill`, wired through
+  GoReleaser's `notarize` config) now runs as part of the release
+  pipeline, so the Homebrew cask actually launches on a clean macOS
+  install without any manual Gatekeeper workaround.
+
+## [0.2.2] - 2026-09-18
+
+### Added
+
+- First real unit test coverage (`internal/tcx`, `internal/concept2`,
+  `cmd/concept2garmin`), covering lap-building, the watts formulas, and
+  display/formatting helpers. `make test` was previously a no-op.
+
+### Fixed
+
+- `lapsFromStrokes` double-counted the just-finished interval's
+  duration/distance when closing a lap at an interval boundary, inflating
+  lap 0's totals and pushing subsequent laps negative. Caught while
+  writing the tests above.
+- `Result.StartTime`'s `DateUTC` fallback could never succeed — it
+  appended a literal `"Z0700"` onto the date string being parsed instead
+  of adding a zone token to the parse layout, so `time.Parse` always
+  errored on that path.
+
+### Changed
+
+- README: fleshed out the `show` command's example with its full output
+  (drag factor, cadence, avg power, source, segment count).
+
 ## [0.2.1] - 2026-09-18
 
 ### Fixed

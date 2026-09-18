@@ -31,6 +31,27 @@ func TestCadenceLabel(t *testing.T) {
 	if got := cadenceLabel("rower"); got != "Avg stroke rate (spm)" {
 		t.Errorf("cadenceLabel(rower) = %q", got)
 	}
+	if got := cadenceLabel("dynamic"); got != "Avg stroke rate (spm)" {
+		t.Errorf("cadenceLabel(dynamic) = %q", got)
+	}
+}
+
+// TestActivityTypeFromFileName covers every machineLabel-derived file name
+// prefix, including "dynamic" (DynamicRow) - see issue about the "dynamic"
+// machine type having no test coverage at all.
+func TestActivityTypeFromFileName(t *testing.T) {
+	cases := map[string]string{
+		"2026-09-18-1231-Bike-30min-13.1km.tcx":      "ride",
+		"2026-09-18-1231-Row-30min-8.0km.tcx":        "rowing",
+		"2026-09-18-1231-DynamicRow-30min-8.0km.tcx": "rowing",
+		"2026-09-18-1231-SkiErg-30min-8.0km.tcx":     "workout",
+		"2026-09-18-1231-Workout-30min-8.0km.tcx":    "workout",
+	}
+	for name, want := range cases {
+		if got := activityTypeFromFileName(name); got != want {
+			t.Errorf("activityTypeFromFileName(%q) = %q, want %q", name, got, want)
+		}
+	}
 }
 
 func TestValueOr(t *testing.T) {
