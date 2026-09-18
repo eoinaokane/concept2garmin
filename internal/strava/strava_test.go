@@ -29,7 +29,7 @@ func withServer(t *testing.T, handler http.HandlerFunc) *httptest.Server {
 }
 
 func TestTokenRoundTrip(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	withTempConfigDir(t)
 
 	want := Token{AccessToken: "access", RefreshToken: "refresh", ExpiresAt: 12345}
 	if err := saveToken(want); err != nil {
@@ -58,7 +58,7 @@ func TestTokenRoundTrip(t *testing.T) {
 }
 
 func TestLoadToken_MissingFile(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	withTempConfigDir(t)
 	if _, err := loadToken(); err == nil {
 		t.Fatal("loadToken() with no saved token: want error, got nil")
 	}
@@ -103,7 +103,7 @@ func TestPostForToken_ErrorStatus(t *testing.T) {
 }
 
 func TestAccessToken_ReturnsCachedTokenWhenNotExpired(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	withTempConfigDir(t)
 	withServer(t, func(w http.ResponseWriter, r *http.Request) {
 		t.Fatal("token endpoint should not be called when the cached token is still valid")
 	})
@@ -123,7 +123,7 @@ func TestAccessToken_ReturnsCachedTokenWhenNotExpired(t *testing.T) {
 }
 
 func TestAccessToken_RefreshesExpiredToken(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	withTempConfigDir(t)
 	withServer(t, func(w http.ResponseWriter, r *http.Request) {
 		if err := r.ParseForm(); err != nil {
 			t.Fatalf("ParseForm: %v", err)
