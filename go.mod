@@ -1,4 +1,4 @@
-module github.com/eoinaokane/concept2garmin
+module github.com/eoinaokane/concept2upload
 
 go 1.27.1
 

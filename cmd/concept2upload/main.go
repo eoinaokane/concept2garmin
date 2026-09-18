@@ -1,4 +1,4 @@
-// Command concept2garmin lists your Concept2 logbook workouts and
+// Command concept2upload lists your Concept2 logbook workouts and
 // downloads a chosen one as a Garmin-compatible TCX file (with heart rate,
 // cadence, and watts where available). It can also upload a downloaded
 // workout straight to Strava.
@@ -15,9 +15,9 @@ import (
 
 	"github.com/urfave/cli/v3"
 
-	"github.com/eoinaokane/concept2garmin/internal/concept2"
-	"github.com/eoinaokane/concept2garmin/internal/strava"
-	"github.com/eoinaokane/concept2garmin/internal/tcx"
+	"github.com/eoinaokane/concept2upload/internal/concept2"
+	"github.com/eoinaokane/concept2upload/internal/strava"
+	"github.com/eoinaokane/concept2upload/internal/tcx"
 )
 
 const defaultLimit = 10
@@ -28,7 +28,7 @@ const defaultDir = "workout"
 // features, and backwards-compatible fixes respectively. Overridden at
 // release build time via -ldflags "-X main.version=..." (see
 // .goreleaser.yaml), so it must stay a var, not a const.
-var version = "0.4.0"
+var version = "0.5.0"
 
 func main() {
 	tokenFlag := &cli.StringFlag{
@@ -43,8 +43,8 @@ func main() {
 	}
 
 	cmd := &cli.Command{
-		Name:    "concept2garmin",
-		Usage:   "list and download Concept2 logbook workouts as Garmin-compatible TCX files",
+		Name:    "concept2upload",
+		Usage:   "download Concept2 logbook workouts as Garmin-compatible TCX files and upload them to Strava",
 		Version: version,
 		Commands: []*cli.Command{
 			{
@@ -117,7 +117,7 @@ func main() {
 
 func runAuth(ctx context.Context, cmd *cli.Command) error {
 	if cmd.Args().Len() != 1 {
-		return fmt.Errorf("expected exactly one argument: your Concept2 API token (e.g. 'concept2garmin auth-concept2 abc123')")
+		return fmt.Errorf("expected exactly one argument: your Concept2 API token (e.g. 'concept2upload auth-concept2 abc123')")
 	}
 	if err := concept2.SaveToken(cmd.Args().First()); err != nil {
 		return fmt.Errorf("saving token: %w", err)
@@ -129,7 +129,7 @@ func runAuth(ctx context.Context, cmd *cli.Command) error {
 
 // resolveToken prefers an explicit --token flag (or CONCEPT2_TOKEN env var,
 // which the flag is already sourced from), persisting it for next time, and
-// otherwise falls back to a token saved earlier via 'concept2garmin auth-concept2'.
+// otherwise falls back to a token saved earlier via 'concept2upload auth-concept2'.
 func resolveToken(cmd *cli.Command) (string, error) {
 	if t := strings.TrimSpace(cmd.String("token")); t != "" {
 		if err := concept2.SaveToken(t); err != nil {
@@ -140,7 +140,7 @@ func resolveToken(cmd *cli.Command) (string, error) {
 	if t, err := concept2.LoadStoredToken(); err == nil && t != "" {
 		return t, nil
 	}
-	return "", fmt.Errorf("no Concept2 token found; run 'concept2garmin auth-concept2 <token>' or pass --token/CONCEPT2_TOKEN")
+	return "", fmt.Errorf("no Concept2 token found; run 'concept2upload auth-concept2 <token>' or pass --token/CONCEPT2_TOKEN")
 }
 
 // resolveStravaCredentials prefers explicit --client-id/--client-secret
@@ -239,7 +239,7 @@ func runList(ctx context.Context, cmd *cli.Command) error {
 	for i, r := range results {
 		fmt.Printf("%-3d %s\n", i+1, summaryLine(r))
 	}
-	fmt.Printf("\nRun 'concept2garmin get <#>' to download one as a .tcx file.\n")
+	fmt.Printf("\nRun 'concept2upload get <#>' to download one as a .tcx file.\n")
 	return nil
 }
 
@@ -249,7 +249,7 @@ func runGet(ctx context.Context, cmd *cli.Command) error {
 		return err
 	}
 	if cmd.Args().Len() != 1 {
-		return fmt.Errorf("expected exactly one argument: the position from 'list' (e.g. 'concept2garmin get 1')")
+		return fmt.Errorf("expected exactly one argument: the position from 'list' (e.g. 'concept2upload get 1')")
 	}
 	position, err := parsePosition(cmd.Args().First())
 	if err != nil {
@@ -297,7 +297,7 @@ func runShow(ctx context.Context, cmd *cli.Command) error {
 		return err
 	}
 	if cmd.Args().Len() != 1 {
-		return fmt.Errorf("expected exactly one argument: the position from 'list' (e.g. 'concept2garmin show 1')")
+		return fmt.Errorf("expected exactly one argument: the position from 'list' (e.g. 'concept2upload show 1')")
 	}
 	position, err := parsePosition(cmd.Args().First())
 	if err != nil {
@@ -496,7 +496,7 @@ func resolvePosition(client *concept2.Client, dir string, position, limit int) (
 func resolvePositionFromCache(dir string, position int) (int64, error) {
 	c, ok := loadListCache(dir)
 	if !ok {
-		return 0, fmt.Errorf("no cached 'list' result found in %s; run 'concept2garmin list' first", dir)
+		return 0, fmt.Errorf("no cached 'list' result found in %s; run 'concept2upload list' first", dir)
 	}
 	item, ok := c.Positions[fmt.Sprintf("%d", position)]
 	if !ok {
@@ -638,7 +638,7 @@ func runStravaAuth(ctx context.Context, cmd *cli.Command) error {
 
 func runStravaUpload(ctx context.Context, cmd *cli.Command) error {
 	if cmd.Args().Len() != 1 {
-		return fmt.Errorf("expected exactly one argument: the position from 'list' (e.g. 'concept2garmin upload-strava 1')")
+		return fmt.Errorf("expected exactly one argument: the position from 'list' (e.g. 'concept2upload upload-strava 1')")
 	}
 	position, err := parsePosition(cmd.Args().First())
 	if err != nil {
@@ -655,7 +655,7 @@ func runStravaUpload(ctx context.Context, cmd *cli.Command) error {
 	key := fmt.Sprintf("%d", resultID)
 	entry, ok := m.Entries[key]
 	if !ok || entry.File == "" {
-		return fmt.Errorf("workout at position %d hasn't been downloaded yet; run 'concept2garmin get %d' first", position, position)
+		return fmt.Errorf("workout at position %d hasn't been downloaded yet; run 'concept2upload get %d' first", position, position)
 	}
 	if entry.UploadedToStrava {
 		fmt.Printf("%s was already uploaded to Strava (activity %d); nothing to do.\n", entry.File, entry.StravaActivityID)
@@ -672,7 +672,7 @@ func runStravaUpload(ctx context.Context, cmd *cli.Command) error {
 	}
 	accessToken, err := strava.AccessToken(clientID, clientSecret)
 	if err != nil {
-		return fmt.Errorf("run 'concept2garmin auth-strava' first: %w", err)
+		return fmt.Errorf("run 'concept2upload auth-strava' first: %w", err)
 	}
 
 	fmt.Printf("uploading %s...\n", entry.File)

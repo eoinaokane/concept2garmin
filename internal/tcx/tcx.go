@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/eoinaokane/concept2garmin/internal/concept2"
+	"github.com/eoinaokane/concept2upload/internal/concept2"
 )
 
 const (
@@ -20,7 +20,7 @@ const (
 	// SourceURL is credited in every exported file's <Notes> (and in the
 	// Strava upload description), so an activity retains a pointer back to
 	// how it was produced.
-	SourceURL = "https://github.com/eoinaokane/concept2garmin"
+	SourceURL = "https://github.com/eoinaokane/concept2upload"
 )
 
 // buildNotes composes a human-readable summary of the workout (type,
