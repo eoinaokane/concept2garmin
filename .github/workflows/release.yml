@@ -11,6 +11,12 @@ permissions:
 jobs:
   goreleaser:
     runs-on: macos-latest
+    # Gates HOMEBREW_TAP_GITHUB_TOKEN behind a GitHub Environment so it's
+    # only ever exposed to a run you've explicitly approved (see the
+    # environment's required-reviewer/deployment-tag protection rules) -
+    # this is a public repo, so third-party Actions in this job (or a
+    # compromised collaborator account) are a real, if unlikely, risk.
+    environment: release
     steps:
       - uses: actions/checkout@v4
         with:
