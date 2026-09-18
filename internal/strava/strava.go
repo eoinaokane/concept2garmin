@@ -230,7 +230,7 @@ type UploadResult struct {
 
 // UploadTCX uploads a TCX file as a new Strava activity and polls until
 // Strava finishes processing it, returning the resulting activity ID.
-func UploadTCX(accessToken, filePath, name, activityType string) (UploadResult, error) {
+func UploadTCX(accessToken, filePath, name, description, activityType string) (UploadResult, error) {
 	f, err := os.Open(filePath)
 	if err != nil {
 		return UploadResult{}, err
@@ -249,6 +249,9 @@ func UploadTCX(accessToken, filePath, name, activityType string) (UploadResult, 
 	_ = w.WriteField("data_type", "tcx")
 	if name != "" {
 		_ = w.WriteField("name", name)
+	}
+	if description != "" {
+		_ = w.WriteField("description", description)
 	}
 	if activityType != "" {
 		_ = w.WriteField("activity_type", activityType)

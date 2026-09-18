@@ -250,13 +250,12 @@ func runGet(ctx context.Context, cmd *cli.Command) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	fileName := sensibleFileName(detail)
-	fullPath := filepath.Join(dir, fileName)
+	fullPath := uniqueFilePath(dir, sensibleFileName(detail))
 	if err := os.WriteFile(fullPath, body, 0o644); err != nil {
 		return fmt.Errorf("writing %s: %w", fullPath, err)
 	}
 
-	if err := recordDownload(dir, detail, fileName); err != nil {
+	if err := recordDownload(dir, detail, filepath.Base(fullPath)); err != nil {
 		return fmt.Errorf("updating manifest: %w", err)
 	}
 
@@ -477,6 +476,21 @@ func sensibleFileName(detail concept2.ResultDetail) string {
 	return fmt.Sprintf("%s-%s-%.0fmin-%.1fkm.tcx", datePart, machineLabel(detail.Type), minutes, km)
 }
 
+// uniqueFilePath returns dir/fileName if that path doesn't exist yet, or
+// dir/fileName-N.tcx (incrementing N) otherwise, so 'get' never silently
+// overwrites an existing download.
+func uniqueFilePath(dir, fileName string) string {
+	candidate := filepath.Join(dir, fileName)
+	ext := filepath.Ext(fileName)
+	base := strings.TrimSuffix(fileName, ext)
+	for n := 1; ; n++ {
+		if _, err := os.Stat(candidate); os.IsNotExist(err) {
+			return candidate
+		}
+		candidate = filepath.Join(dir, fmt.Sprintf("%s-%d%s", base, n, ext))
+	}
+}
+
 // elapsedMinutes parses a Concept2 "M:SS.s" or "H:MM:SS.s" TimeFormatted
 // string into minutes, falling back to the raw tenths-of-a-second Time
 // field if TimeFormatted can't be parsed.
@@ -600,7 +614,7 @@ func runStravaUpload(ctx context.Context, cmd *cli.Command) error {
 		fullPath := filepath.Join(dir, entry.File)
 
 		fmt.Printf("uploading %s...\n", entry.File)
-		result, err := strava.UploadTCX(accessToken, fullPath, strings.TrimSuffix(entry.File, ".tcx"), activityTypeFromFileName(entry.File))
+		result, err := strava.UploadTCX(accessToken, fullPath, strings.TrimSuffix(entry.File, ".tcx"), "Uploaded via "+tcx.SourceURL, activityTypeFromFileName(entry.File))
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "warning: failed to upload %s: %v\n", entry.File, err)
 			continue

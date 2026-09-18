@@ -15,7 +15,22 @@ import (
 const (
 	tcxNamespace = "http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2"
 	tpxNamespace = "http://www.garmin.com/xmlschemas/ActivityExtension/v2"
+
+	// SourceURL is credited in every exported file's <Notes> (and in the
+	// Strava upload description), so an activity retains a pointer back to
+	// how it was produced.
+	SourceURL = "https://github.com/eoinaokane/concept2garmin"
 )
+
+// buildNotes combines the workout's own Concept2 comment (if any) with a
+// short attribution back to SourceURL.
+func buildNotes(concept2Comment string) string {
+	attribution := "Exported from Concept2 via " + SourceURL
+	if concept2Comment == "" {
+		return attribution
+	}
+	return concept2Comment + "\n\n" + attribution
+}
 
 // point is an internal, unit-normalized representation of a single sample
 // before it's rendered into the TCX XML structs.
@@ -27,26 +42,49 @@ type point struct {
 	Watts          int
 }
 
-// Build renders a Concept2 result as a TCX document.
+// lapData is one lap's worth of points plus the lap-level totals Concept2
+// reports for it (its own time/distance/calories, not running totals).
+type lapData struct {
+	TimeTenths     int
+	DistanceMeters float64
+	Calories       int
+	Points         []point
+}
+
+// Build renders a Concept2 result as a TCX document, with one <Lap> per
+// Concept2 interval/split so Garmin Connect and Strava show them as
+// separate segments rather than one lap covering the whole workout.
 func Build(detail concept2.ResultDetail) ([]byte, error) {
 	start, err := detail.StartTime()
 	if err != nil {
 		return nil, fmt.Errorf("tcx: could not determine start time for result %d: %w", detail.ID, err)
 	}
 
-	points := buildPoints(detail, start)
-	if len(points) < 2 {
-		// Always have at least a start and end point so Strava/Garmin
-		// accept the lap.
-		points = []point{
-			{Time: start, DistanceMeters: 0, HeartRateBpm: detail.HeartRate.Average},
-			{
-				Time:           start.Add(time.Duration(detail.Time) * 100 * time.Millisecond),
-				DistanceMeters: float64(detail.Distance),
-				HeartRateBpm:   detail.HeartRate.Average,
-				Cadence:        detail.StrokeRate,
+	laps := buildLaps(detail, start)
+	if len(laps) == 0 {
+		// No intervals/splits and no stroke data at all; synthesize a
+		// single start/end lap covering the whole result.
+		laps = []lapData{{
+			TimeTenths:     detail.Time,
+			DistanceMeters: float64(detail.Distance),
+			Calories:       detail.CaloriesTotal,
+			Points: []point{
+				{Time: start, DistanceMeters: 0, HeartRateBpm: detail.HeartRate.Average},
+				{
+					Time:           start.Add(time.Duration(detail.Time) * 100 * time.Millisecond),
+					DistanceMeters: float64(detail.Distance),
+					HeartRateBpm:   detail.HeartRate.Average,
+					Cadence:        clampByte(detail.StrokeRate),
+				},
 			},
-		}
+		}}
+	}
+
+	xmlLaps := make([]lap, 0, len(laps))
+	cursor := start
+	for _, l := range laps {
+		xmlLaps = append(xmlLaps, renderLap(cursor, l))
+		cursor = cursor.Add(time.Duration(l.TimeTenths) * 100 * time.Millisecond)
 	}
 
 	doc := trainingCenterDatabase{
@@ -59,15 +97,8 @@ func Build(detail concept2.ResultDetail) ([]byte, error) {
 			Activity: activity{
 				Sport: sportFor(detail.Type),
 				ID:    start.UTC().Format(time.RFC3339),
-				Lap: lap{
-					StartTime:        start.UTC().Format(time.RFC3339),
-					TotalTimeSeconds: float64(detail.Time) / 10.0,
-					DistanceMeters:   float64(detail.Distance),
-					Calories:         detail.CaloriesTotal,
-					Intensity:        "Active",
-					TriggerMethod:    "Manual",
-					Track:            track{Trackpoint: renderTrackpoints(points)},
-				},
+				Laps:  xmlLaps,
+				Notes: buildNotes(detail.Comments),
 			},
 		},
 	}
@@ -79,40 +110,75 @@ func Build(detail concept2.ResultDetail) ([]byte, error) {
 	return append([]byte(xml.Header), body...), nil
 }
 
-// buildPoints prefers stroke-by-stroke data when available, falling back to
-// the coarser interval/split summary, and finally to no intermediate points
-// at all (Build then synthesizes a two-point lap).
-func buildPoints(detail concept2.ResultDetail, start time.Time) []point {
-	if len(detail.Strokes.Data) > 0 {
-		return pointsFromStrokes(detail.Strokes.Data, start)
-	}
+// buildLaps prefers stroke-by-stroke data when available (grouped into laps
+// at each interval boundary), falling back to one lap per interval/split
+// summary, and finally no laps at all (Build then synthesizes one lap
+// covering the whole result).
+func buildLaps(detail concept2.ResultDetail, start time.Time) []lapData {
 	segments := detail.Workout.Intervals
 	if len(segments) == 0 {
 		segments = detail.Workout.Splits
 	}
+
+	if len(detail.Strokes.Data) > 0 {
+		laps := lapsFromStrokes(detail.Strokes.Data, start)
+		// Concept2's own interval/split totals are more precise than what
+		// we can derive from stroke samples (which are only reported to
+		// the nearest tenth of a second/decimetre), so prefer them when
+		// the counts line up.
+		if len(segments) == len(laps) {
+			for i := range laps {
+				laps[i].TimeTenths = segments[i].Time
+				laps[i].DistanceMeters = float64(segments[i].Distance)
+				laps[i].Calories = segments[i].CaloriesTotal
+			}
+		}
+		return laps
+	}
 	if len(segments) > 0 {
-		return pointsFromSegments(segments, start, SplitDistanceMetres(detail.Type))
+		return lapsFromSegments(segments, start, SplitDistanceMetres(detail.Type))
 	}
 	return nil
 }
 
-// pointsFromStrokes converts stroke-level samples (time in tenths of a
+// lapsFromStrokes converts stroke-level samples (time in tenths of a
 // second, distance in decimetres, both cumulative *within the current
-// interval*) into absolute, whole-workout samples.
-func pointsFromStrokes(strokes []concept2.Stroke, start time.Time) []point {
-	points := make([]point, 0, len(strokes))
+// interval*) into one lap per interval, with absolute whole-workout
+// timestamps and distances.
+func lapsFromStrokes(strokes []concept2.Stroke, start time.Time) []lapData {
+	var laps []lapData
+	var curPoints []point
 	var timeOffsetTenths, distOffsetDeci, lastT, lastD int
+	lapStartTenths, lapStartDeci := 0, 0
+
+	flush := func() {
+		if len(curPoints) == 0 {
+			return
+		}
+		endTenths := timeOffsetTenths + lastT
+		endDeci := distOffsetDeci + lastD
+		laps = append(laps, lapData{
+			TimeTenths:     endTenths - lapStartTenths,
+			DistanceMeters: float64(endDeci-lapStartDeci) / 10.0,
+			Points:         curPoints,
+		})
+		curPoints = nil
+		lapStartTenths, lapStartDeci = endTenths, endDeci
+	}
+
 	for i, s := range strokes {
 		if i > 0 && s.Time < lastT {
 			// A new interval started; carry the previous interval's totals
-			// forward so time/distance keep climbing across the workout.
+			// forward so time/distance keep climbing across the workout,
+			// and close out the lap we were building.
 			timeOffsetTenths += lastT
 			distOffsetDeci += lastD
+			flush()
 		}
 		absTenths := timeOffsetTenths + s.Time
 		absDeci := distOffsetDeci + s.Distance
 
-		points = append(points, point{
+		curPoints = append(curPoints, point{
 			Time:           start.Add(time.Duration(absTenths) * 100 * time.Millisecond),
 			DistanceMeters: float64(absDeci) / 10.0,
 			HeartRateBpm:   s.HeartRate,
@@ -121,31 +187,122 @@ func pointsFromStrokes(strokes []concept2.Stroke, start time.Time) []point {
 		})
 		lastT, lastD = s.Time, s.Distance
 	}
-	return points
+	flush()
+	return laps
 }
 
-// pointsFromSegments builds one trackpoint per interval/split, using each
-// segment's own (non-cumulative) time and distance to advance a running
-// total. This is coarser than stroke data but is all the API returns for
-// workouts recorded without per-stroke logging. Watts are estimated from
-// each segment's own average pace (its time/distance ratio).
-func pointsFromSegments(segments []concept2.WorkoutSegment, start time.Time, splitDistanceMetres int) []point {
-	points := make([]point, 0, len(segments)+1)
-	points = append(points, point{Time: start, DistanceMeters: 0})
+// segmentSampleTenths is how often (tenths of a second) lapsFromSegments
+// emits a trackpoint within a lap. Concept2 only gives us one average pace
+// per segment (no per-second data), so every sample in a lap repeats that
+// segment's constant watts/cadence/heart rate. Sampling every second
+// rather than just emitting a start/end point matters: analysis tools
+// (Strava, TrainingPeaks, etc.) that compute time-in-zone from trackpoints
+// treat the gaps between samples as near-zero power, so two sparse points
+// per lap made a real ~230W effort look like 99% Zone 1.
+const segmentSampleTenths = 10
 
+// lapsFromSegments builds one lap per interval/split, densely sampled
+// every segmentSampleTenths, using each segment's own (non-cumulative)
+// time and distance to advance a running total across laps. This is
+// coarser than stroke data (a constant estimate per segment rather than a
+// true per-stroke value) but is all the API returns for workouts recorded
+// without per-stroke logging.
+func lapsFromSegments(segments []concept2.WorkoutSegment, start time.Time, splitDistanceMetres int) []lapData {
+	laps := make([]lapData, 0, len(segments))
 	var cumTenths, cumDist int
 	for _, seg := range segments {
+		segStartTenths, segStartDist := cumTenths, cumDist
 		cumTenths += seg.Time
 		cumDist += seg.Distance
+
+		watts := WattsFromDistanceTime(seg.Distance, seg.Time, splitDistanceMetres)
+		cadence := clampByte(seg.StrokeRate)
+		hr := seg.HeartRate.Ending
+
+		var points []point
+		for t := 0; t < seg.Time; t += segmentSampleTenths {
+			frac := float64(t) / float64(seg.Time)
+			points = append(points, point{
+				Time:           start.Add(time.Duration(segStartTenths+t) * 100 * time.Millisecond),
+				DistanceMeters: float64(segStartDist) + frac*float64(seg.Distance),
+				HeartRateBpm:   hr,
+				Cadence:        cadence,
+				Watts:          watts,
+			})
+		}
 		points = append(points, point{
 			Time:           start.Add(time.Duration(cumTenths) * 100 * time.Millisecond),
 			DistanceMeters: float64(cumDist),
-			HeartRateBpm:   seg.HeartRate.Ending,
-			Cadence:        clampByte(seg.StrokeRate),
-			Watts:          WattsFromDistanceTime(seg.Distance, seg.Time, splitDistanceMetres),
+			HeartRateBpm:   hr,
+			Cadence:        cadence,
+			Watts:          watts,
+		})
+
+		laps = append(laps, lapData{
+			TimeTenths:     seg.Time,
+			DistanceMeters: float64(seg.Distance),
+			Calories:       seg.CaloriesTotal,
+			Points:         points,
 		})
 	}
-	return points
+	return laps
+}
+
+// renderLap turns a lapData into the TCX <Lap> element, including
+// Garmin-style Average/MaximumHeartRateBpm and average Cadence summaries
+// derived from that lap's own trackpoints.
+func renderLap(startTime time.Time, l lapData) lap {
+	avgHR, maxHR := heartRateStats(l.Points)
+	xmlLap := lap{
+		StartTime:        startTime.UTC().Format(time.RFC3339),
+		TotalTimeSeconds: float64(l.TimeTenths) / 10.0,
+		DistanceMeters:   l.DistanceMeters,
+		Calories:         l.Calories,
+		Intensity:        "Active",
+		Cadence:          avgCadence(l.Points),
+		TriggerMethod:    "Manual",
+		Track:            track{Trackpoint: renderTrackpoints(l.Points)},
+	}
+	if avgHR > 0 {
+		xmlLap.AverageHeartRateBpm = &heartRateBpm{Value: avgHR}
+	}
+	if maxHR > 0 {
+		xmlLap.MaximumHeartRateBpm = &heartRateBpm{Value: maxHR}
+	}
+	return xmlLap
+}
+
+func heartRateStats(points []point) (avg, max int) {
+	var sum, count int
+	for _, p := range points {
+		if p.HeartRateBpm <= 0 {
+			continue
+		}
+		sum += p.HeartRateBpm
+		count++
+		if p.HeartRateBpm > max {
+			max = p.HeartRateBpm
+		}
+	}
+	if count == 0 {
+		return 0, 0
+	}
+	return sum / count, max
+}
+
+func avgCadence(points []point) int {
+	var sum, count int
+	for _, p := range points {
+		if p.Cadence <= 0 {
+			continue
+		}
+		sum += p.Cadence
+		count++
+	}
+	if count == 0 {
+		return 0
+	}
+	return sum / count
 }
 
 // SplitDistanceMetres returns the reference distance Concept2 uses for a
@@ -251,17 +408,25 @@ type activities struct {
 type activity struct {
 	Sport string `xml:"Sport,attr"`
 	ID    string `xml:"Id"`
-	Lap   lap    `xml:"Lap"`
+	Laps  []lap  `xml:"Lap"`
+	Notes string `xml:"Notes,omitempty"`
 }
 
+// lap field order follows the TCX schema's required sequence for
+// ActivityLap_t (StartTime, TotalTimeSeconds, DistanceMeters, Calories,
+// Average/MaximumHeartRateBpm, Intensity, Cadence, TriggerMethod, Track) -
+// Garmin Connect and other strict TCX readers reject an out-of-order file.
 type lap struct {
-	StartTime        string  `xml:"StartTime,attr"`
-	TotalTimeSeconds float64 `xml:"TotalTimeSeconds"`
-	DistanceMeters   float64 `xml:"DistanceMeters"`
-	Calories         int     `xml:"Calories"`
-	Intensity        string  `xml:"Intensity"`
-	TriggerMethod    string  `xml:"TriggerMethod"`
-	Track            track   `xml:"Track"`
+	StartTime           string        `xml:"StartTime,attr"`
+	TotalTimeSeconds    float64       `xml:"TotalTimeSeconds"`
+	DistanceMeters      float64       `xml:"DistanceMeters"`
+	Calories            int           `xml:"Calories"`
+	AverageHeartRateBpm *heartRateBpm `xml:"AverageHeartRateBpm,omitempty"`
+	MaximumHeartRateBpm *heartRateBpm `xml:"MaximumHeartRateBpm,omitempty"`
+	Intensity           string        `xml:"Intensity"`
+	Cadence             int           `xml:"Cadence,omitempty"`
+	TriggerMethod       string        `xml:"TriggerMethod"`
+	Track               track         `xml:"Track"`
 }
 
 type track struct {

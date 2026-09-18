@@ -2,3 +2,4 @@
 /workout/
 .idea/
 *.tcx
+.DS_Store

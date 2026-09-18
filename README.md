@@ -65,11 +65,15 @@ into `./workout/`:
 `get` only ever downloads one workout per invocation. It reuses the exact
 result shown by your last `list` call when possible (via
 `workout/.last_list.json`), so `get 3` really is the workout you saw at
-position 3.
+position 3. It never overwrites an existing file — if the target name is
+already taken, it appends `-1`, `-2`, etc.
 
 Import the resulting `.tcx` file into Garmin Connect via
 **Import Data** on the Garmin Connect website, or drag-and-drop it onto
-Strava's **Upload Activity** page.
+Strava's **Upload Activity** page. Each Concept2 interval/split becomes its
+own `<Lap>` (with per-lap average/max heart rate and cadence), and the file
+carries a `<Notes>` crediting this project (plus your Concept2 comment, if
+you left one on the workout).
 
 ### Stretch: uploading straight to Strava
 
