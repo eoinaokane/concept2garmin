@@ -24,6 +24,11 @@ import (
 const defaultLimit = 10
 const defaultDir = "workout"
 
+// version follows Semantic Versioning (https://semver.org/): MAJOR.MINOR.PATCH,
+// incremented for incompatible CLI/API changes, backwards-compatible
+// features, and backwards-compatible fixes respectively.
+const version = "0.1.0"
+
 func main() {
 	tokenFlag := &cli.StringFlag{
 		Name:    "token",
@@ -37,8 +42,9 @@ func main() {
 	}
 
 	cmd := &cli.Command{
-		Name:  "concept2garmin",
-		Usage: "list and download Concept2 logbook workouts as Garmin-compatible TCX files",
+		Name:    "concept2garmin",
+		Usage:   "list and download Concept2 logbook workouts as Garmin-compatible TCX files",
+		Version: version,
 		Commands: []*cli.Command{
 			{
 				Name:      "auth",
