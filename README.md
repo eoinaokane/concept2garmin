@@ -227,7 +227,7 @@ own Firebase project.
    [gcloud CLI](https://cloud.google.com/sdk/docs/install), then
    `firebase login` / `gcloud auth login`.
 
-### Deploy
+### Deploy manually
 
 ```bash
 # Build and deploy the API to Cloud Run.
@@ -252,6 +252,25 @@ file to manage.
 Finally, add `https://your-project-id.web.app/api/strava/callback` as an
 **Authorization Callback Domain** on your Strava API application's settings
 page.
+
+### Continuous deployment (GitHub Actions)
+
+`.github/workflows/deploy-firebase.yml` runs the same two deploy steps
+above automatically on every push to `main`, gated on `go build`/`vet`/
+`test`/`gofmt` passing first. It needs these repo secrets
+(Settings > Secrets and variables > Actions):
+
+| Secret                 | Value                                                                                                    |
+| ----------------------- | --------------------------------------------------------------------------------------------------------- |
+| `GCP_SA_KEY`            | JSON key for a service account with the **Cloud Run Admin**, **Cloud Build Editor**, **Artifact Registry Writer**, **Service Account User**, and **Firebase Hosting Admin** roles on your project |
+| `GCP_PROJECT_ID`        | Your Firebase/GCP project ID                                                                             |
+| `STRAVA_CLIENT_ID`      | From your Strava API application                                                                         |
+| `STRAVA_CLIENT_SECRET`  | From your Strava API application                                                                         |
+| `PUBLIC_BASE_URL`       | `https://your-project-id.web.app`                                                                        |
+
+A long-lived JSON key is the simplest way to get this running; swap it for
+[Workload Identity Federation](https://github.com/google-github-actions/auth#setup)
+(no key file at all) once the pipeline is working end to end.
 
 ### Local development
 
