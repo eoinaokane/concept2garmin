@@ -1,0 +1,61 @@
+# Deploys cmd/server to Cloud Run and web/ + firestore.rules to Firebase
+# Hosting/Firestore on every push to main, once the go.yml checks below
+# pass. See README.md's "Web app (Firebase + Cloud Run)" section for the
+# one-time project setup this depends on, and for what each secret below
+# needs to be.
+name: Deploy to Firebase
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: deploy-firebase
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: "go.mod"
+      - run: go build -v ./...
+      - run: go vet ./...
+      - run: go test -v ./...
+      - run: test -z "$(gofmt -l .)"
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy API to Cloud Run
+        run: |
+          gcloud run deploy concept2upload-server \
+            --source . \
+            --region us-central1 \
+            --project "${{ secrets.GCP_PROJECT_ID }}" \
+            --allow-unauthenticated \
+            --quiet \
+            --set-env-vars "STRAVA_CLIENT_ID=${{ secrets.STRAVA_CLIENT_ID }},STRAVA_CLIENT_SECRET=${{ secrets.STRAVA_CLIENT_SECRET }},PUBLIC_BASE_URL=${{ secrets.PUBLIC_BASE_URL }}"
+
+      - name: Deploy Firestore rules and Hosting
+        run: |
+          npx --yes firebase-tools@latest deploy \
+            --only firestore:rules,hosting \
+            --project "${{ secrets.GCP_PROJECT_ID }}" \
+            --non-interactive
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ steps.auth.outputs.credentials_file_path }}
