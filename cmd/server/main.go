@@ -79,9 +79,30 @@ func main() {
 	}
 }
 
+// idTokenVerifier is the subset of *auth.Client (Firebase Admin SDK) this
+// server depends on, so tests can substitute a fake verifier instead of
+// needing a real Firebase project.
+type idTokenVerifier interface {
+	VerifyIDToken(ctx context.Context, idToken string) (*fbauth.Token, error)
+}
+
+// tokenStore is the subset of *webstore.Store this server depends on, so
+// tests can substitute an in-memory fake instead of needing a real
+// Firestore project. *webstore.Store already satisfies this.
+type tokenStore interface {
+	GetConcept2Token(ctx context.Context, uid string) (string, error)
+	SaveConcept2Token(ctx context.Context, uid, token string) error
+	GetStravaToken(ctx context.Context, uid string) (strava.Token, error)
+	SaveStravaToken(ctx context.Context, uid string, tok strava.Token) error
+	SaveOAuthState(ctx context.Context, state, uid string) error
+	ConsumeOAuthState(ctx context.Context, state string) (uid string, err error)
+	GetUpload(ctx context.Context, uid string, resultID int64) (webstore.UploadRecord, error)
+	SaveUpload(ctx context.Context, uid string, resultID, activityID int64) error
+}
+
 type server struct {
-	auth  *fbauth.Client
-	store *webstore.Store
+	auth  idTokenVerifier
+	store tokenStore
 
 	// stravaClientID/stravaClientSecret are this deployment's own Strava
 	// API application credentials (from https://www.strava.com/settings/api)
