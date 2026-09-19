@@ -213,17 +213,58 @@ func tryOpenBrowser(url string) {
 }
 
 func exchangeCode(clientID, clientSecret, code string) error {
+	tok, err := ExchangeCode(clientID, clientSecret, code)
+	if err != nil {
+		return err
+	}
+	return saveToken(tok)
+}
+
+// ExchangeCode exchanges an OAuth authorization code for a token pair,
+// without persisting it anywhere. Callers that manage their own per-user
+// storage (e.g. a multi-user web server backed by a database, rather than
+// this package's single-user local file) call this directly and save the
+// result themselves; the CLI's own exchangeCode wraps this and saves to
+// TokenPath().
+func ExchangeCode(clientID, clientSecret, code string) (Token, error) {
 	form := map[string]string{
 		"client_id":     clientID,
 		"client_secret": clientSecret,
 		"code":          code,
 		"grant_type":    "authorization_code",
 	}
-	tok, err := postForToken(form)
-	if err != nil {
-		return err
+	return postForToken(form)
+}
+
+// RefreshAccessToken exchanges a refresh token for a new token pair,
+// without persisting it anywhere - see ExchangeCode.
+func RefreshAccessToken(clientID, clientSecret, refreshToken string) (Token, error) {
+	form := map[string]string{
+		"client_id":     clientID,
+		"client_secret": clientSecret,
+		"refresh_token": refreshToken,
+		"grant_type":    "refresh_token",
 	}
-	return saveToken(tok)
+	return postForToken(form)
+}
+
+// BuildAuthorizeURL returns the Strava OAuth consent URL for the given
+// client ID, redirect URI, and opaque state value (echoed back verbatim to
+// redirectURI, so a caller handling multiple concurrent/multi-user flows -
+// like a web server - can use it to identify which user's flow a callback
+// belongs to). Unlike Authorize, this doesn't run a local callback server;
+// the caller is responsible for handling the redirect itself.
+func BuildAuthorizeURL(clientID, redirectURI, state string) string {
+	v := url.Values{}
+	v.Set("client_id", clientID)
+	v.Set("response_type", "code")
+	v.Set("redirect_uri", redirectURI)
+	v.Set("approval_prompt", "auto")
+	v.Set("scope", "activity:write,read")
+	if state != "" {
+		v.Set("state", state)
+	}
+	return authorizeURL + "?" + v.Encode()
 }
 
 // AccessToken returns a valid access token, transparently refreshing it via
@@ -237,13 +278,7 @@ func AccessToken(clientID, clientSecret string) (string, error) {
 		return tok.AccessToken, nil
 	}
 
-	form := map[string]string{
-		"client_id":     clientID,
-		"client_secret": clientSecret,
-		"refresh_token": tok.RefreshToken,
-		"grant_type":    "refresh_token",
-	}
-	refreshed, err := postForToken(form)
+	refreshed, err := RefreshAccessToken(clientID, clientSecret, tok.RefreshToken)
 	if err != nil {
 		return "", err
 	}
