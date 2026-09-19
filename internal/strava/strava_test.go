@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
@@ -99,6 +100,109 @@ func TestPostForToken_ErrorStatus(t *testing.T) {
 
 	if _, err := postForToken(map[string]string{}); err == nil {
 		t.Fatal("postForToken() with 401 response: want error, got nil")
+	}
+}
+
+func TestExchangeCode_Success(t *testing.T) {
+	withServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseForm(); err != nil {
+			t.Fatalf("ParseForm: %v", err)
+		}
+		if got := r.Form.Get("grant_type"); got != "authorization_code" {
+			t.Errorf("grant_type = %q, want authorization_code", got)
+		}
+		if got := r.Form.Get("code"); got != "auth-code" {
+			t.Errorf("code = %q, want auth-code", got)
+		}
+		json.NewEncoder(w).Encode(Token{AccessToken: "access", RefreshToken: "refresh", ExpiresAt: 42})
+	})
+
+	tok, err := ExchangeCode("id", "secret", "auth-code")
+	if err != nil {
+		t.Fatalf("ExchangeCode: %v", err)
+	}
+	if tok.AccessToken != "access" || tok.RefreshToken != "refresh" || tok.ExpiresAt != 42 {
+		t.Errorf("ExchangeCode() = %+v, unexpected", tok)
+	}
+
+	// ExchangeCode must not persist anything locally - unlike the CLI's own
+	// exchangeCode, callers manage their own storage (e.g. a multi-user
+	// web server).
+	withTempConfigDir(t)
+	if _, err := loadToken(); err == nil {
+		t.Error("ExchangeCode() persisted a token locally; it should not")
+	}
+}
+
+func TestExchangeCode_ErrorStatus(t *testing.T) {
+	withServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		fmt.Fprint(w, `{"message":"invalid code"}`)
+	})
+
+	if _, err := ExchangeCode("id", "secret", "bad-code"); err == nil {
+		t.Fatal("ExchangeCode() with a 400 response: want error, got nil")
+	}
+}
+
+func TestRefreshAccessToken_Success(t *testing.T) {
+	withServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseForm(); err != nil {
+			t.Fatalf("ParseForm: %v", err)
+		}
+		if got := r.Form.Get("grant_type"); got != "refresh_token" {
+			t.Errorf("grant_type = %q, want refresh_token", got)
+		}
+		if got := r.Form.Get("refresh_token"); got != "old-refresh" {
+			t.Errorf("refresh_token = %q, want old-refresh", got)
+		}
+		json.NewEncoder(w).Encode(Token{AccessToken: "new-access", RefreshToken: "new-refresh", ExpiresAt: 99})
+	})
+
+	tok, err := RefreshAccessToken("id", "secret", "old-refresh")
+	if err != nil {
+		t.Fatalf("RefreshAccessToken: %v", err)
+	}
+	if tok.AccessToken != "new-access" {
+		t.Errorf("RefreshAccessToken() = %+v, unexpected", tok)
+	}
+}
+
+func TestBuildAuthorizeURL(t *testing.T) {
+	got := BuildAuthorizeURL("my-client-id", "https://example.com/callback", "opaque-state")
+
+	u, err := url.Parse(got)
+	if err != nil {
+		t.Fatalf("BuildAuthorizeURL() returned an unparseable URL: %v", err)
+	}
+	if u.Scheme+"://"+u.Host+u.Path != authorizeURL {
+		t.Errorf("BuildAuthorizeURL() base = %q, want %q", u.Scheme+"://"+u.Host+u.Path, authorizeURL)
+	}
+
+	q := u.Query()
+	for key, want := range map[string]string{
+		"client_id":       "my-client-id",
+		"response_type":   "code",
+		"redirect_uri":    "https://example.com/callback",
+		"approval_prompt": "auto",
+		"scope":           "activity:write,read",
+		"state":           "opaque-state",
+	} {
+		if got := q.Get(key); got != want {
+			t.Errorf("query[%q] = %q, want %q", key, got, want)
+		}
+	}
+}
+
+func TestBuildAuthorizeURL_OmitsEmptyState(t *testing.T) {
+	got := BuildAuthorizeURL("my-client-id", "https://example.com/callback", "")
+
+	u, err := url.Parse(got)
+	if err != nil {
+		t.Fatalf("BuildAuthorizeURL() returned an unparseable URL: %v", err)
+	}
+	if u.Query().Has("state") {
+		t.Error("BuildAuthorizeURL() with an empty state included a state param; want it omitted")
 	}
 }
 
