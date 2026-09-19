@@ -52,8 +52,12 @@ jobs:
             --set-env-vars "STRAVA_CLIENT_ID=${{ secrets.STRAVA_CLIENT_ID }},STRAVA_CLIENT_SECRET=${{ secrets.STRAVA_CLIENT_SECRET }},PUBLIC_BASE_URL=${{ secrets.PUBLIC_BASE_URL }}"
 
       - name: Deploy Firestore rules and Hosting
+        # Pinned rather than @latest: this step runs with GCP_SA_KEY in
+        # hand, so a compromised firebase-tools release on npm would run
+        # with it too. Bump this deliberately (and review the release)
+        # rather than trusting whatever's newest on every deploy.
         run: |
-          npx --yes firebase-tools@latest deploy \
+          npx --yes firebase-tools@15.30.2 deploy \
             --only firestore:rules,hosting \
             --project "${{ secrets.GCP_PROJECT_ID }}" \
             --non-interactive
